@@ -1,0 +1,39 @@
+# Infraestrutura local (Podman: `podman-compose up -d db db_test`).
+# Credenciais vêm do arquivo .env (copie de .env.example). Nada sensível é versionado.
+services:
+  # Banco de DESENVOLVIMENTO — dados persistidos em volume nomeado.
+  db:
+    image: docker.io/library/postgres:18-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: devboard
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - devboard_pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d devboard']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Banco de TESTES — instância separada, descartável (dados em memória/tmpfs).
+  db_test:
+    image: docker.io/library/postgres:18-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: devboard_test
+    ports:
+      - '127.0.0.1:5433:5432'
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d devboard_test']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  devboard_pgdata:
