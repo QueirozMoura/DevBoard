@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "API REST de gerenciamento de projetos e tarefas",
   "scripts": {
+    "postinstall": "prisma generate",
     "dev": "tsx watch --env-file-if-exists=.env src/server.ts",
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "start": "node --env-file-if-exists=.env dist/server.js",
@@ -15,11 +16,20 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "db:up": "podman-compose up -d db db_test",
-    "db:down": "podman-compose down"
+    "db:down": "podman-compose down",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:migrate:create": "prisma migrate dev --create-only",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:test": "PRISMA_TARGET=test prisma migrate deploy",
+    "db:status": "prisma migrate status",
+    "db:validate": "prisma validate"
   },
   "license": "UNLICENSED",
   "type": "module",
   "dependencies": {
+    "@prisma/adapter-pg": "7.10.1",
+    "@prisma/client": "7.10.1",
     "fastify": "5.12.8",
     "zod": "4.6.7"
   },
@@ -30,6 +40,7 @@
     "eslint": "10.14.0",
     "eslint-config-prettier": "10.1.8",
     "prettier": "3.9.10",
+    "prisma": "7.10.1",
     "tsx": "4.23.15",
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.1",

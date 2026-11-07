@@ -9,6 +9,7 @@ const testDatabaseUrl =
 export default defineConfig({
   test: {
     environment: 'node',
+    fileParallelism: false, // testes de integração compartilham o mesmo banco
     include: ['tests/**/*.test.ts'],
     env: {
       NODE_ENV: 'test',
