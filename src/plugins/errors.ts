@@ -6,6 +6,7 @@ const appErrors = {
   LOGIN_VALIDATION_ERROR: { status: 400, message: 'Dados de login inválidos' },
   INVALID_CREDENTIALS: { status: 401, message: 'E-mail ou senha inválidos' },
   INVALID_REFRESH_TOKEN: { status: 401, message: 'Sessão inválida ou expirada' },
+  USER_NOT_FOUND: { status: 401, message: 'Autenticação necessária' },
   UNAUTHORIZED: { status: 401, message: 'Autenticação necessária' },
 } as const;
 

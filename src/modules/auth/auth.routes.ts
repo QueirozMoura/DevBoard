@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { AppError } from '../../plugins/errors.js';
 import { createDummyPasswordHash } from './auth.password.js';
-import { loginSchema, registerSchema, sessionSchema } from './auth.schema.js';
+import { loginSchema, profilePatchSchema, registerSchema, sessionSchema } from './auth.schema.js';
 import { createSession, useSession } from './auth.session.js';
 import { loginUser, registerUser } from './auth.service.js';
 
@@ -32,6 +32,38 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     reply.header('Cache-Control', 'no-store');
   });
   const dummyPasswordHash = await createDummyPasswordHash();
+  app.get('/api/v1/me', { onRequest: app.authenticate }, async (request) => {
+    const authenticatedUser = request.user;
+    if (!authenticatedUser) throw new AppError('UNAUTHORIZED');
+    const user = await app.prisma.user.findUnique({
+      where: { id: authenticatedUser.id },
+      select: { id: true, name: true, email: true, createdAt: true },
+    });
+    if (!user) throw new AppError('USER_NOT_FOUND');
+    return user;
+  });
+  app.patch('/api/v1/me', { onRequest: app.authenticate }, async (request) => {
+    const authenticatedUser = request.user;
+    if (!authenticatedUser) throw new AppError('UNAUTHORIZED');
+    const parsed = profilePatchSchema.safeParse(request.body);
+    if (!parsed.success) throw new AppError('VALIDATION_ERROR');
+    const data = {
+      ...(parsed.data.name !== undefined ? { name: parsed.data.name } : {}),
+      ...(parsed.data.email !== undefined ? { email: parsed.data.email } : {}),
+    };
+    try {
+      return await app.prisma.user.update({
+        where: { id: authenticatedUser.id }, data,
+        select: { id: true, name: true, email: true, createdAt: true },
+      });
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === 'P2002')
+        throw new AppError('EMAIL_ALREADY_EXISTS');
+      if (error instanceof Error && 'code' in error && error.code === 'P2025')
+        throw new AppError('USER_NOT_FOUND');
+      throw error;
+    }
+  });
   app.post('/register', {
     schema: {
       response: {
