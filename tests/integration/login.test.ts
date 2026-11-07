@@ -20,6 +20,7 @@ const unauthorized = { error: 'UNAUTHORIZED', message: 'Autenticação necessár
 
 interface LoginResponse {
   accessToken: string;
+  refreshToken: string;
   user: { id: string; name: string; email: string; createdAt: string };
 }
 
@@ -80,7 +81,7 @@ describe('login e autenticação JWT (PostgreSQL real)', () => {
       .sign(key);
   };
 
-  it('retorna somente accessToken e dados públicos, com JWT válido por 15 minutos', async () => {
+  it('retorna os dois tokens e dados públicos, com JWT válido por 15 minutos', async () => {
     const response = await login();
     expect(response.statusCode).toBe(200);
     expect(response.headers['cache-control']).toBe('no-store');
@@ -88,6 +89,7 @@ describe('login e autenticação JWT (PostgreSQL real)', () => {
     const stored = await app.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     expect(body).toEqual({
       accessToken: expect.any(String) as string,
+      refreshToken: expect.any(String) as string,
       user: {
         id: userId,
         name: stored.name,
@@ -113,13 +115,12 @@ describe('login e autenticação JWT (PostgreSQL real)', () => {
       passwordHash,
       credentials.password,
       'passwordHash',
-      'refreshToken',
       env.JWT_SECRET,
     ]) {
       expect(response.body).not.toContain(value);
       expect(JSON.stringify(decodeJwt(body.accessToken))).not.toContain(value);
     }
-    expect(await app.prisma.refreshToken.count()).toBe(0);
+    expect(await app.prisma.refreshToken.count()).toBe(1);
   });
 
   it('aceita a senha criada pelo endpoint de cadastro', async () => {
@@ -373,9 +374,10 @@ describe('login e autenticação JWT (PostgreSQL real)', () => {
         payload: credentials,
       });
       expect(response.statusCode).toBe(200);
-      const { accessToken } = response.json<LoginResponse>();
+      const { accessToken, refreshToken } = response.json<LoginResponse>();
       for (const value of [
         accessToken,
+        refreshToken,
         credentials.password,
         passwordHash,
         env.JWT_SECRET,

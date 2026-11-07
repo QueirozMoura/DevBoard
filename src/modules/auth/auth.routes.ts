@@ -1,7 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { AppError } from '../../plugins/errors.js';
 import { createDummyPasswordHash } from './auth.password.js';
-import { loginSchema, registerSchema } from './auth.schema.js';
+import { loginSchema, registerSchema, sessionSchema } from './auth.schema.js';
+import { createSession, useSession } from './auth.session.js';
 import { loginUser, registerUser } from './auth.service.js';
 
 const publicUserSchema = {
@@ -16,7 +17,20 @@ const publicUserSchema = {
   },
 };
 
+const tokenPairSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['accessToken', 'refreshToken'],
+  properties: {
+    accessToken: { type: 'string' },
+    refreshToken: { type: 'string' },
+  },
+};
+
 export const authRoutes: FastifyPluginAsync = async (app) => {
+  app.addHook('onRequest', async (_request, reply) => {
+    reply.header('Cache-Control', 'no-store');
+  });
   const dummyPasswordHash = await createDummyPasswordHash();
   app.post('/register', {
     schema: {
@@ -38,22 +52,45 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         200: {
           type: 'object',
           additionalProperties: false,
-          required: ['accessToken', 'user'],
+          required: ['accessToken', 'refreshToken', 'user'],
           properties: {
-            accessToken: { type: 'string' },
+            ...tokenPairSchema.properties,
             user: publicUserSchema,
           },
         },
       },
     },
     handler: async (request, reply) => {
-      // Aplica-se a sucesso e a falhas, evitando cache de respostas de autenticação.
-      reply.header('Cache-Control', 'no-store');
       const result = loginSchema.safeParse(request.body);
       if (!result.success) throw new AppError('LOGIN_VALIDATION_ERROR');
       const user = await loginUser(app.prisma, result.data, dummyPasswordHash);
       const accessToken = await app.accessTokens.sign(user.id);
-      return reply.send({ accessToken, user });
+      const refreshToken = await createSession(app.prisma, user.id);
+      return reply.send({ accessToken, refreshToken, user });
+    },
+  });
+  app.post('/refresh', {
+    schema: { response: { 200: tokenPairSchema } },
+    handler: async (request, reply) => {
+      const parsed = sessionSchema.safeParse(request.body);
+      if (!parsed.success) throw new AppError('INVALID_REFRESH_TOKEN');
+      const result = await useSession(app.prisma, parsed.data.refreshToken, (userId) =>
+        app.accessTokens.sign(userId),
+      );
+      return reply.send(result);
+    },
+  });
+  app.post('/logout', {
+    handler: async (request, reply) => {
+      const parsed = sessionSchema.safeParse(request.body);
+      if (!parsed.success) throw new AppError('INVALID_REFRESH_TOKEN');
+      await useSession(
+        app.prisma,
+        parsed.data.refreshToken,
+        (userId) => app.accessTokens.sign(userId),
+        true,
+      );
+      return reply.status(204).send();
     },
   });
 };

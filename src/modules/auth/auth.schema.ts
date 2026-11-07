@@ -14,3 +14,8 @@ export const loginSchema = z.strictObject({
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
+
+// 32 bytes em base64url canônico, sem padding e sem espaços.
+export const sessionSchema = z.strictObject({
+  refreshToken: z.string().regex(/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/),
+});

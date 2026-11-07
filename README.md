@@ -2,7 +2,9 @@
 
 API REST de gerenciamento de projetos e tarefas (estilo Jira/Trello), construída como projeto de portfólio.
 
-**Status:** Fase 1.3 — cadastro, login (`POST /api/v1/auth/login`) e infraestrutura de autenticação JWT. A sessão completa com refresh token será implementada na Fase 1.4. Perfil, projetos e tarefas ficam para as próximas fases.
+**Status:** Fase 1.4 — cadastro, login, JWT, refresh token com rotação e logout. Perfil, projetos e tarefas ficam para as próximas fases.
+
+Relatório da implementação e das verificações: [Fase 1.4](docs/fase-1.4.md).
 
 ## Stack
 
@@ -82,6 +84,7 @@ Sucesso (`200`):
 ```json
 {
   "accessToken": "JWT",
+  "refreshToken": "token opaco de 43 caracteres",
   "user": {
     "id": "UUID",
     "name": "Ana Silva",
@@ -109,9 +112,48 @@ app.get('/rota-futura', { onRequest: app.authenticate }, (request) => {
 
 O hook aceita somente `Authorization: Bearer <accessToken>` e disponibiliza `request.user = { id }`. Falta de token ou qualquer falha de validação retorna `401` com `{ "error": "UNAUTHORIZED", "message": "Autenticação necessária" }` e `WWW-Authenticate: Bearer`. A rota demonstrativa existe somente nos testes.
 
-O login responde com `Cache-Control: no-store`. Não retorna senha, hash ou refresh token, não cria cookies e não grava refresh tokens. Os logs omitem corpos, headers sensíveis, tokens e parâmetros de query; falhas usam códigos genéricos em vez de erros brutos.
+Todas as rotas de autenticação respondem com `Cache-Control: no-store`, inclusive nas falhas. Não são criados cookies. Logs não incluem corpos, respostas, headers sensíveis ou parâmetros de query; erros inesperados registram somente código genérico.
 
-**Limites desta fase:** não há refresh token, rotação, logout, revogação, consulta de perfil ou rate limiting. A proteção verifica o JWT sem consultar o usuário no banco a cada requisição. Tokens emitidos permanecem válidos até a expiração enquanto a chave for mantida. A sessão completa será implementada na **Fase 1.4**.
+## Refresh token e logout (Fase 1.4)
+
+Cada login cria uma sessão independente (família UUID). O refresh token é opaco: 32 bytes gerados por `node:crypto.randomBytes`, codificados em base64url canônico sem padding (43 caracteres, 256 bits). Somente seu SHA-256 hexadecimal é persistido em `refresh_tokens`; o token original existe apenas em memória e na resposta JSON. Não há segredo adicional para refresh tokens. A tabela e os índices existentes da Fase 1.1 já suportam esta implementação; nenhuma migration adicional é necessária.
+
+`POST /api/v1/auth/refresh` recebe exclusivamente JSON:
+
+```json
+{ "refreshToken": "token recebido no login ou no último refresh" }
+```
+
+Sucesso (`200`): `{ "accessToken": "JWT", "refreshToken": "novo token opaco" }`.
+O novo access token segue as regras anteriores (15 minutos). A sessão expira **sete dias após o login**, sem estender esse prazo ao rotacionar.
+
+A rotação acontece em uma transação PostgreSQL com isolamento `READ COMMITTED`: consulta o hash, obtém um advisory lock transacional por família, relê o token após o lock, verifica revogação/expiração, cria o sucessor e marca o anterior com `revokedAt` e `replacedById`. Refresh e logout usam o mesmo lock, inclusive em processos/instâncias diferentes. O PostgreSQL libera esse [lock ao encerrar a transação](https://www.postgresql.org/docs/17/explicit-locking.html#ADVISORY-LOCKS). Falhas inesperadas revertem a operação.
+
+Qualquer apresentação de um token revogado no refresh revoga todos os tokens ainda ativos da família, incluindo sucessores. Essa revogação é confirmada no banco **antes** de retornar o erro 401; não é desfeita pelo lançamento do erro. Outras sessões do mesmo usuário permanecem ativas. Os registros anteriores são preservados para detectar reuso.
+
+Em refresh simultâneo com o mesmo token, somente uma requisição pode rotacionar. As demais detectam reuso e revogam a família, inclusive o sucessor emitido pela vencedora. Não há janela de tolerância. O cliente deve coordenar refresh em uma única operação compartilhada entre seus consumidores, evitando retries automáticos do token antigo. Se a resposta de uma rotação se perder na rede, repetir o token antigo exige novo login.
+
+`POST /api/v1/auth/logout` recebe o mesmo JSON e retorna **204 sem corpo** ao revogar toda a sessão correspondente. Aceita também um ancestral conhecido e é idempotente para tokens conhecidos já revogados/expirados. Um token desconhecido ou malformado retorna 401. Logout concorrente com refresh termina com toda a família revogada.
+
+Refresh expirado, desconhecido, revogado ou com formato/corpo inválido retorna a mesma resposta (`401`):
+
+```json
+{ "error": "INVALID_REFRESH_TOKEN", "message": "Sessão inválida ou expirada" }
+```
+
+JSON malformado mantém o erro genérico de transporte do Fastify (`400`). Tokens em query, cookies ou Authorization não substituem o corpo exigido. Falhas do banco ou da assinatura retornam o erro interno genérico (`500`) sem registrar argumentos sensíveis.
+
+### Contrato de armazenamento no cliente
+
+- Usar HTTPS fora do desenvolvimento local. Login e refresh entregam ambos os tokens no corpo JSON, sem cookies.
+- No navegador, manter os tokens **somente em memória**; não gravar em localStorage, sessionStorage, IndexedDB, URLs, analytics ou logs. Recarregar/fechar a página exige novo login. Não há frontend nesta fase; este é o contrato a ser seguido pelo cliente futuro.
+- Em cliente nativo, persistência opcional somente no armazenamento seguro do sistema operacional. O servidor armazena exclusivamente o hash.
+- Após refresh, substituir ambos os tokens em memória; após logout ou erro 401 de refresh, apagar os tokens e solicitar novo login. Coordenar refresh para impedir chamadas simultâneas.
+- Não se usa autenticação ambiente por cookies: o navegador não anexa o refresh token automaticamente, portanto este fluxo não necessita de token anti-CSRF. A API não habilita CORS e nunca aceita cookies como credencial. Mudar esse contrato para cookies exigirá implementar as proteções CSRF correspondentes. Memória não protege contra JavaScript malicioso em execução: o futuro cliente deve mitigar XSS.
+
+**Limitações:** logout/reuso revogam refresh tokens; JWTs já emitidos continuam válidos até expirar (até 15 minutos), pois a proteção de rotas permanece stateless. Não há rate limiting nem limpeza automática de registros expirados nesta fase. Uma futura política de limpeza deve preservar ancestrais enquanto houver sessão válida para não perder detecção de reuso. Perfil, projetos e tarefas não foram implementados ou alterados.
+
+Os testes de integração usam PostgreSQL real, incluindo duas instâncias da aplicação para concorrência, revogação de toda a família, isolamento entre sessões, rollback e ausência de segredos nos logs. A suíte anterior de cadastro/login/JWT permanece, com a expectativa da resposta de login atualizada para os dois tokens.
 
 ## Decisões técnicas
 

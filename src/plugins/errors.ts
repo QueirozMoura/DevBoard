@@ -5,6 +5,7 @@ const appErrors = {
   EMAIL_ALREADY_EXISTS: { status: 409, message: 'E-mail já cadastrado' },
   LOGIN_VALIDATION_ERROR: { status: 400, message: 'Dados de login inválidos' },
   INVALID_CREDENTIALS: { status: 401, message: 'E-mail ou senha inválidos' },
+  INVALID_REFRESH_TOKEN: { status: 401, message: 'Sessão inválida ou expirada' },
   UNAUTHORIZED: { status: 401, message: 'Autenticação necessária' },
 } as const;
 
