@@ -2,12 +2,12 @@
 
 API REST de gerenciamento de projetos e tarefas (estilo Jira/Trello), construída como projeto de portfólio.
 
-**Status:** Fase 1.1 — Prisma + PostgreSQL (modelos `User` e `RefreshToken`, migration inicial). Autenticação, projetos e tarefas virão nas próximas fases.
+**Status:** Fase 1.2 — cadastro de usuários (`POST /api/v1/auth/register`) com Prisma + PostgreSQL e Argon2id. Login, tokens, perfil, projetos e tarefas ficam para as próximas fases.
 
 ## Stack
 
 Node.js (TypeScript strict) · Fastify 5 · Zod 4 · Vitest · ESLint + Prettier · PostgreSQL (via Podman) · GitHub Actions.
-Prisma 7.10.1 (`@prisma/adapter-pg`). Argon2, JWT e Swagger entram nas fases em que forem necessários.
+Prisma 7.10.1 (`@prisma/adapter-pg`) · Argon2id (`argon2`). JWT e Swagger entram nas fases em que forem necessários.
 
 ## Pré-requisitos
 
@@ -45,10 +45,32 @@ src/
   server.ts       entrypoint: listen + encerramento gracioso (SIGINT/SIGTERM)
   config/env.ts   variáveis de ambiente validadas com Zod (falha rápida no boot)
   plugins/        preocupações transversais (tratamento de erros)
-  modules/        um diretório por domínio (hoje: health)
+  modules/        um diretório por domínio (health e auth: rotas, schema e serviço)
 tests/
   unit/ · integration/
 ```
+
+## Cadastro de usuários
+
+`POST /api/v1/auth/register` recebe JSON com exclusivamente:
+
+- `name`: texto de 2 a 100 caracteres após trim.
+- `email`: e-mail válido de até 254 caracteres após trim + lowercase.
+- `password`: texto de 8 a 128 caracteres, preservado sem trim.
+
+Sucesso (`201`): `{ "id": "UUID", "name": "Ana Silva", "email": "ana@example.com", "createdAt": "data ISO 8601" }`.
+Somente esses quatro campos são consultados e serializados na resposta.
+
+Erros de validação, inclusive campos extras (`400`): `{ "error": "VALIDATION_ERROR", "message": "Dados de cadastro inválidos" }`.
+E-mail duplicado (`409`): `{ "error": "EMAIL_ALREADY_EXISTS", "message": "E-mail já cadastrado" }`.
+Falhas inesperadas (`500`): `{ "error": "INTERNAL_ERROR", "message": "Erro interno do servidor" }`.
+Erros de transporte, como JSON malformado, mantêm o código do Fastify com mensagem genérica.
+
+A constraint UNIQUE do PostgreSQL impede duplicados; o serviço traduz o erro Prisma `P2002`, inclusive em cadastros concorrentes.
+A senha usa Argon2id com salt aleatório, memória de 65536 KiB, 3 iterações e paralelismo 4, usando a [API de node-argon2](https://github.com/ranisalt/node-argon2).
+Não há registro do corpo da requisição, de senhas ou de erros brutos do Prisma nos logs.
+
+Os testes de cadastro usam o PostgreSQL real de testes, incluindo verificação do hash e concorrência. Antes de `npm test`, execute `npm run db:up` e `npm run db:migrate:test`.
 
 ## Decisões técnicas
 
@@ -58,6 +80,6 @@ tests/
 - **Prisma 7.10.1 (série `prev`):** a tag `latest` do npm aponta para 8.0.0-rc; fixamos a última 7.x estável, com `prisma`, `@prisma/client` e `@prisma/adapter-pg` na mesma versão.
 - **Migrations seguras por alvo:** `prisma.config.ts` usa `DATABASE_URL` por padrão (recusa banco `*_test`) e `TEST_DATABASE_URL` com `PRISMA_TARGET=test` (exige banco `*_test`). O CI aplica as migrations em um Postgres de serviço.
 - **Constraints no SQL da migration:** `users.email` em minúsculas e `refresh_tokens.expires_at > created_at` (CHECKs que o Prisma não expressa); IDs UUID v7 no Postgres (`uuid`), timestamps `timestamptz`.
-- **Logs estruturados** com pino (embutido no Fastify), com `authorization`/`cookie` redigidos.
+- **Logs estruturados** com pino (embutido no Fastify), com `authorization`/`cookie`, corpo e campos de senha redigidos; erros inesperados registram somente um código genérico, sem argumentos de queries ou stack sensível.
 - **Variáveis de ambiente** carregadas com `--env-file-if-exists` do Node (sem dotenv).
 - **Podman:** `compose.yaml` usa nomes de imagem totalmente qualificados e publica portas só em `127.0.0.1`.

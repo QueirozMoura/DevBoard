@@ -1,13 +1,23 @@
 import type { FastifyError, FastifyInstance } from 'fastify';
 
+const appErrors = {
+  VALIDATION_ERROR: { status: 400, message: 'Dados de cadastro inválidos' },
+  EMAIL_ALREADY_EXISTS: { status: 409, message: 'E-mail já cadastrado' },
+} as const;
+
+export class AppError extends Error {
+  constructor(readonly code: keyof typeof appErrors) {
+    super(appErrors[code].message);
+  }
+}
+
 function isFastifyError(error: unknown): error is FastifyError {
   return error instanceof Error && 'statusCode' in error;
 }
 
 /**
- * Tratamento de erros mínimo e centralizado: resposta JSON uniforme e
+ * Tratamento de erros centralizado: resposta JSON uniforme e
  * nenhum detalhe interno (mensagem/stack) vazando em erros 5xx.
- * Erros de domínio (AppError) entram na Fase 1+.
  */
 export function registerErrorHandling(app: FastifyInstance): void {
   app.setNotFoundHandler((request, reply) => {
@@ -18,15 +28,24 @@ export function registerErrorHandling(app: FastifyInstance): void {
   });
 
   app.setErrorHandler((error, request, reply) => {
+    if (error instanceof AppError) {
+      void reply.status(appErrors[error.code].status).send({
+        error: error.code,
+        message: error.message,
+      });
+      return;
+    }
+
     // Só erros do Fastify (validação, JSON inválido, etc.) carregam statusCode 4xx.
     if (isFastifyError(error) && error.statusCode && error.statusCode < 500) {
       void reply
         .status(error.statusCode)
-        .send({ error: error.code, message: error.message });
+        .send({ error: error.code, message: 'Requisição inválida' });
       return;
     }
 
-    request.log.error({ err: error }, 'erro não tratado');
+    // Erros do Prisma podem incluir argumentos de queries e hashes de senha.
+    request.log.error({ code: 'INTERNAL_ERROR' }, 'erro não tratado');
     void reply
       .status(500)
       .send({ error: 'INTERNAL_ERROR', message: 'Erro interno do servidor' });

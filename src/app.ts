@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Env } from './config/env.js';
+import { authRoutes } from './modules/auth/auth.routes.js';
 import { healthRoutes } from './modules/health/health.routes.js';
 import { registerErrorHandling } from './plugins/errors.js';
 import { registerPrisma } from './plugins/prisma.js';
@@ -14,7 +15,14 @@ export function buildApp(env: Env): FastifyInstance {
     logger: {
       level: env.LOG_LEVEL,
       redact: {
-        paths: ['req.headers.authorization', 'req.headers.cookie'],
+        paths: [
+          'req.headers.authorization',
+          'req.headers.cookie',
+          'req.body',
+          'body',
+          'password',
+          'passwordHash',
+        ],
         censor: '[REDACTED]',
       },
     },
@@ -23,6 +31,7 @@ export function buildApp(env: Env): FastifyInstance {
   registerErrorHandling(app);
   registerPrisma(app, env);
   void app.register(healthRoutes);
+  void app.register(authRoutes, { prefix: '/api/v1/auth' });
 
   return app;
 }
