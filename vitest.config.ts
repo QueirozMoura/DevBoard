@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { defineConfig } from 'vitest/config';
 
 // Os testes SEMPRE usam o banco de teste (porta 5433, banco devboard_test),
@@ -15,6 +16,10 @@ export default defineConfig({
       NODE_ENV: 'test',
       LOG_LEVEL: 'silent',
       DATABASE_URL: testDatabaseUrl,
+      // Chave efêmera exclusiva dos testes; nunca reutiliza a chave de desenvolvimento.
+      JWT_SECRET: randomBytes(32).toString('hex'),
+      JWT_ISSUER: 'devboard-api-test',
+      JWT_AUDIENCE: 'devboard-client-test',
     },
     coverage: {
       provider: 'v8',

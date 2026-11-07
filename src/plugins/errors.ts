@@ -3,6 +3,9 @@ import type { FastifyError, FastifyInstance } from 'fastify';
 const appErrors = {
   VALIDATION_ERROR: { status: 400, message: 'Dados de cadastro inválidos' },
   EMAIL_ALREADY_EXISTS: { status: 409, message: 'E-mail já cadastrado' },
+  LOGIN_VALIDATION_ERROR: { status: 400, message: 'Dados de login inválidos' },
+  INVALID_CREDENTIALS: { status: 401, message: 'E-mail ou senha inválidos' },
+  UNAUTHORIZED: { status: 401, message: 'Autenticação necessária' },
 } as const;
 
 export class AppError extends Error {
@@ -29,6 +32,7 @@ export function registerErrorHandling(app: FastifyInstance): void {
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof AppError) {
+      if (error.code === 'UNAUTHORIZED') reply.header('WWW-Authenticate', 'Bearer');
       void reply.status(appErrors[error.code].status).send({
         error: error.code,
         message: error.message,

@@ -2,12 +2,12 @@
 
 API REST de gerenciamento de projetos e tarefas (estilo Jira/Trello), construída como projeto de portfólio.
 
-**Status:** Fase 1.2 — cadastro de usuários (`POST /api/v1/auth/register`) com Prisma + PostgreSQL e Argon2id. Login, tokens, perfil, projetos e tarefas ficam para as próximas fases.
+**Status:** Fase 1.3 — cadastro, login (`POST /api/v1/auth/login`) e infraestrutura de autenticação JWT. A sessão completa com refresh token será implementada na Fase 1.4. Perfil, projetos e tarefas ficam para as próximas fases.
 
 ## Stack
 
 Node.js (TypeScript strict) · Fastify 5 · Zod 4 · Vitest · ESLint + Prettier · PostgreSQL (via Podman) · GitHub Actions.
-Prisma 7.10.1 (`@prisma/adapter-pg`) · Argon2id (`argon2`). JWT e Swagger entram nas fases em que forem necessários.
+Prisma 7.10.1 (`@prisma/adapter-pg`) · Argon2id (`argon2`) · JWT (`jose`). Swagger entra em uma fase futura.
 
 ## Pré-requisitos
 
@@ -19,6 +19,7 @@ Prisma 7.10.1 (`@prisma/adapter-pg`) · Argon2id (`argon2`). JWT e Swagger entra
 ```bash
 npm ci
 cp .env.example .env        # ajuste a senha do banco
+openssl rand -hex 32        # cole a saída em JWT_SECRET no .env; não versione a chave
 npm run db:up               # sobe PostgreSQL dev (5432) e teste (5433)
 npm run db:migrate:deploy   # aplica as migrations no banco de DESENVOLVIMENTO
 npm run db:migrate:test     # aplica as migrations no banco de TESTES
@@ -44,7 +45,7 @@ src/
   app.ts          buildApp(env): monta o Fastify sem escutar porta (testável via app.inject)
   server.ts       entrypoint: listen + encerramento gracioso (SIGINT/SIGTERM)
   config/env.ts   variáveis de ambiente validadas com Zod (falha rápida no boot)
-  plugins/        preocupações transversais (tratamento de erros)
+  plugins/        preocupações transversais (erros, Prisma e autenticação JWT)
   modules/        um diretório por domínio (health e auth: rotas, schema e serviço)
 tests/
   unit/ · integration/
@@ -72,6 +73,46 @@ Não há registro do corpo da requisição, de senhas ou de erros brutos do Pris
 
 Os testes de cadastro usam o PostgreSQL real de testes, incluindo verificação do hash e concorrência. Antes de `npm test`, execute `npm run db:up` e `npm run db:migrate:test`.
 
+## Login e autenticação JWT
+
+`POST /api/v1/auth/login` recebe somente `email` e `password`, com os mesmos limites do cadastro. O e-mail é normalizado com trim + lowercase; a senha é preservada exatamente. Zod estrito rejeita campos extras.
+
+Sucesso (`200`):
+
+```json
+{
+  "accessToken": "JWT",
+  "user": {
+    "id": "UUID",
+    "name": "Ana Silva",
+    "email": "ana@example.com",
+    "createdAt": "data ISO 8601"
+  }
+}
+```
+
+Validação (`400`): `{ "error": "LOGIN_VALIDATION_ERROR", "message": "Dados de login inválidos" }`.
+Credenciais inválidas (`401`): `{ "error": "INVALID_CREDENTIALS", "message": "E-mail ou senha inválidos" }`.
+Usuário inexistente e senha incorreta executam uma verificação Argon2id de mesmo custo e retornam a mesma resposta. O hash de comparação para usuário inexistente é gerado na inicialização, antes de aceitar requisições. Isso reduz diferenças de comportamento; não garante tempo constante para consultas ao banco e processamento completo.
+
+O access token usa HS256 com chave de 256 bits e expira em **15 minutos**. O payload contém exclusivamente `sub` (UUID do usuário), `iat`, `exp`, `iss` e `aud`. A validação usa a [API de verificação do jose](https://github.com/panva/jose/blob/main/docs/jwt/verify/functions/jwtVerify.md), exige essas claims, restringe o algoritmo a HS256 e verifica assinatura, expiração, tipo JWT, issuer, audience e idade máxima de 15 minutos.
+
+Configuração obrigatória: `JWT_SECRET` deve conter exatamente 64 caracteres hexadecimais minúsculos, gerados com `openssl rand -hex 32`. Valores curtos ou com padrões repetidos são rejeitados; a validação de formato não comprova aleatoriedade. Não há segredo padrão. `JWT_ISSUER` e `JWT_AUDIENCE` têm os padrões `devboard-api` e `devboard-client`; configure valores próprios por ambiente. Os testes sempre usam uma chave efêmera independente.
+
+Rotas futuras podem usar o hook compartilhado:
+
+```ts
+app.get('/rota-futura', { onRequest: app.authenticate }, (request) => {
+  return { userId: request.user?.id };
+});
+```
+
+O hook aceita somente `Authorization: Bearer <accessToken>` e disponibiliza `request.user = { id }`. Falta de token ou qualquer falha de validação retorna `401` com `{ "error": "UNAUTHORIZED", "message": "Autenticação necessária" }` e `WWW-Authenticate: Bearer`. A rota demonstrativa existe somente nos testes.
+
+O login responde com `Cache-Control: no-store`. Não retorna senha, hash ou refresh token, não cria cookies e não grava refresh tokens. Os logs omitem corpos, headers sensíveis, tokens e parâmetros de query; falhas usam códigos genéricos em vez de erros brutos.
+
+**Limites desta fase:** não há refresh token, rotação, logout, revogação, consulta de perfil ou rate limiting. A proteção verifica o JWT sem consultar o usuário no banco a cada requisição. Tokens emitidos permanecem válidos até a expiração enquanto a chave for mantida. A sessão completa será implementada na **Fase 1.4**.
+
 ## Decisões técnicas
 
 - **TypeScript 6.0.3 (e não 7.x):** o TS 7 é o `latest` no npm, mas `typescript-eslint@8.72.1` declara `typescript <6.1.0` como peer dependency; usar o 7 quebraria o lint com tipos. Reavaliar quando o typescript-eslint suportar o TS 7.
@@ -80,6 +121,6 @@ Os testes de cadastro usam o PostgreSQL real de testes, incluindo verificação 
 - **Prisma 7.10.1 (série `prev`):** a tag `latest` do npm aponta para 8.0.0-rc; fixamos a última 7.x estável, com `prisma`, `@prisma/client` e `@prisma/adapter-pg` na mesma versão.
 - **Migrations seguras por alvo:** `prisma.config.ts` usa `DATABASE_URL` por padrão (recusa banco `*_test`) e `TEST_DATABASE_URL` com `PRISMA_TARGET=test` (exige banco `*_test`). O CI aplica as migrations em um Postgres de serviço.
 - **Constraints no SQL da migration:** `users.email` em minúsculas e `refresh_tokens.expires_at > created_at` (CHECKs que o Prisma não expressa); IDs UUID v7 no Postgres (`uuid`), timestamps `timestamptz`.
-- **Logs estruturados** com pino (embutido no Fastify), com `authorization`/`cookie`, corpo e campos de senha redigidos; erros inesperados registram somente um código genérico, sem argumentos de queries ou stack sensível.
+- **Logs estruturados** com pino (embutido no Fastify), com `authorization`/`cookie`, corpo, campos de senha, tokens e segredos redigidos; parâmetros de query não aparecem no log da requisição. Erros inesperados registram somente um código genérico, sem argumentos de queries ou stack sensível.
 - **Variáveis de ambiente** carregadas com `--env-file-if-exists` do Node (sem dotenv).
 - **Podman:** `compose.yaml` usa nomes de imagem totalmente qualificados e publica portas só em `127.0.0.1`.

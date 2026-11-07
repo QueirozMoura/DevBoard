@@ -10,6 +10,15 @@ const envSchema = z.object({
   DATABASE_URL: z
     .url({ protocol: /^postgres(ql)?$/ })
     .describe('Connection string do PostgreSQL'),
+  JWT_SECRET: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/, 'Exige 32 bytes aleatórios em hexadecimal minúsculo')
+    .refine(
+      (value) => new Set(value).size >= 10 && !/^(.+)\1+$/.test(value),
+      'O segredo deve ser aleatório, sem padrões repetidos',
+    ),
+  JWT_ISSUER: z.string().trim().min(1).max(200).default('devboard-api'),
+  JWT_AUDIENCE: z.string().trim().min(1).max(200).default('devboard-client'),
 });
 
 export type Env = z.infer<typeof envSchema>;

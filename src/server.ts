@@ -22,8 +22,8 @@ async function shutdown(signal: string): Promise<void> {
   try {
     await app.close(); // para de aceitar conexões e executa os hooks onClose
     process.exit(0);
-  } catch (err) {
-    app.log.error({ err }, 'falha ao encerrar');
+  } catch {
+    app.log.error({ code: 'SHUTDOWN_ERROR' }, 'falha ao encerrar');
     process.exit(1);
   }
 }
@@ -32,14 +32,14 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => void shutdown(signal));
 }
 
-process.on('unhandledRejection', (reason) => {
-  app.log.fatal({ err: reason }, 'unhandledRejection');
+process.on('unhandledRejection', () => {
+  app.log.fatal({ code: 'UNHANDLED_REJECTION' }, 'unhandledRejection');
   void shutdown('unhandledRejection');
 });
 
 try {
   await app.listen({ host: env.HOST, port: env.PORT });
-} catch (err) {
-  app.log.fatal({ err }, 'falha ao iniciar');
+} catch {
+  app.log.fatal({ code: 'STARTUP_ERROR' }, 'falha ao iniciar');
   process.exit(1);
 }
