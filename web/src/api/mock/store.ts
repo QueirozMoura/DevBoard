@@ -46,6 +46,10 @@ export function positionFor(index: number): string {
 
 let store: MockStore | null = null;
 
+export function clearMockStore(): void {
+  store = null;
+}
+
 export function getMockStore(): MockStore | null {
   return store;
 }
@@ -160,13 +164,40 @@ export function resetMockStore(me: MockUser): MockStore {
   add(site, 'Corrigir contraste do rodapé', 'TODO', 'LOW', me, null);
   add(site, 'Publicar política de privacidade', 'DONE', 'HIGH', me, -3);
 
+  const activities: Activity[] = [];
+  for (const [index, record] of [site, mobile, payments].entries()) {
+    const owner = record.members.find((m) => m.role === 'OWNER') ?? record.members[0];
+    if (!owner) continue;
+    activities.push({
+      id: nextId(),
+      projectId: record.id,
+      taskId: null,
+      actor: { id: owner.userId, name: owner.name },
+      type: 'PROJECT_CREATED',
+      data: {},
+      createdAt: record.createdAt,
+    });
+    const done = tasks.find((t) => t.projectId === record.id && t.status === 'DONE');
+    if (done) {
+      activities.push({
+        id: nextId(),
+        projectId: record.id,
+        taskId: done.id,
+        actor: { id: owner.userId, name: owner.name },
+        type: 'TASK_MOVED',
+        data: { title: done.title, from: 'IN_REVIEW', to: 'DONE' },
+        createdAt: iso(-3 - index),
+      });
+    }
+  }
+
   store = {
     me,
     people,
     projects: [site, mobile, payments],
     tasks,
     comments: [],
-    activities: [],
+    activities,
   };
   return store;
 }

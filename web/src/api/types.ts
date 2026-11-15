@@ -142,6 +142,13 @@ export interface TaskUpdate {
   assigneeId?: string | null;
   dueDate?: string | null;
 }
+export interface MemberAdd {
+  email: string;
+  role?: Role;
+}
+export interface CommentBody {
+  body: string;
+}
 export interface TaskMove {
   status?: TaskStatus;
   afterTaskId: string | null;
