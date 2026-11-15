@@ -29,10 +29,15 @@ async function projectView(tx: Tx, projectId: string, userId: string) {
   const member = await membership(tx, projectId, userId);
   const project = await tx.project.findUniqueOrThrow({
     where: { id: projectId },
-    include: { _count: { select: { members: true } } },
+    include: { _count: { select: { members: true, tasks: true } } },
   });
   const { _count, ...result } = project;
-  return { ...result, myRole: member.role, memberCount: _count.members, taskCount: 0 };
+  return {
+    ...result,
+    myRole: member.role,
+    memberCount: _count.members,
+    taskCount: _count.tasks,
+  };
 }
 export const projectsRoutes: FastifyPluginAsync = async (app) => {
   app.addHook('onRequest', app.authenticate);
@@ -174,6 +179,10 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
           )
             throw new AppError('LAST_OWNER');
           if (!data) {
+            await tx.task.updateMany({
+              where: { projectId, assigneeId: userId },
+              data: { assigneeId: null },
+            });
             await tx.projectMember.delete({
               where: { projectId_userId: { projectId, userId } },
             });

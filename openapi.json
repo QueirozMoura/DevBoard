@@ -806,7 +806,7 @@
           "Tarefas"
         ],
         "summary": "Quadro Kanban (4 colunas)",
-        "x-status": "planned",
+        "x-status": "implemented",
         "security": [
           {
             "bearerAuth": []
@@ -861,7 +861,7 @@
           "Tarefas"
         ],
         "summary": "Lista tarefas com filtros",
-        "x-status": "planned",
+        "x-status": "implemented",
         "security": [
           {
             "bearerAuth": []
@@ -949,7 +949,7 @@
           "Tarefas"
         ],
         "summary": "Cria tarefa",
-        "x-status": "planned",
+        "x-status": "implemented",
         "security": [
           {
             "bearerAuth": []
@@ -1007,7 +1007,7 @@
           "Tarefas"
         ],
         "summary": "Detalhe",
-        "x-status": "planned",
+        "x-status": "implemented",
         "security": [
           {
             "bearerAuth": []
@@ -1047,7 +1047,7 @@
           "Tarefas"
         ],
         "summary": "Edita campos (não move)",
-        "x-status": "planned",
+        "x-status": "implemented",
         "security": [
           {
             "bearerAuth": []
@@ -1103,7 +1103,7 @@
           "Tarefas"
         ],
         "summary": "Exclui (criador da tarefa ou OWNER)",
-        "x-status": "planned",
+        "x-status": "implemented",
         "security": [
           {
             "bearerAuth": []
@@ -1141,7 +1141,7 @@
           "Tarefas"
         ],
         "summary": "Move entre colunas / reordena",
-        "x-status": "planned",
+        "x-status": "implemented",
         "security": [
           {
             "bearerAuth": []
