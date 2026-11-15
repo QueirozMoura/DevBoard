@@ -1,3 +1,4 @@
+import { changes, record } from '../activities/activities.js';
 import { userId, at } from '../shared/core.js';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
@@ -187,17 +188,24 @@ export const tasksRoutes: FastifyPluginAsync = (app) => {
       await membership(tx, projectId, userId(request));
       const data = parse(create, request.body);
       await assignee(tx, projectId, data.assigneeId);
-      return taskView(
-        await tx.task.create({
-          data: {
-            ...defined(data),
-            projectId,
-            createdById: userId(request),
-            position: await position(tx, projectId, data.status, undefined),
-          },
-          include: taskInclude,
-        }),
+      const result = await tx.task.create({
+        data: {
+          ...defined(data),
+          projectId,
+          createdById: userId(request),
+          position: await position(tx, projectId, data.status, undefined),
+        },
+        include: taskInclude,
+      });
+      await record(
+        tx,
+        projectId,
+        userId(request),
+        'TASK_CREATED',
+        { title: result.title },
+        result.id,
       );
+      return taskView(result);
     });
     return reply.status(201).send(result);
   });
@@ -213,13 +221,22 @@ export const tasksRoutes: FastifyPluginAsync = (app) => {
       const { task } = await taskAccess(tx, taskId, userId(request), true);
       const data = parse(patch, request.body);
       await assignee(tx, task.projectId, data.assigneeId);
-      return taskView(
-        await tx.task.update({
-          where: { id: taskId },
-          data: defined(data),
-          include: taskInclude,
-        }),
-      );
+      const result = await tx.task.update({
+        where: { id: taskId },
+        data: defined(data),
+        include: taskInclude,
+      });
+      const changed = changes(task, defined(data));
+      if (changed.length)
+        await record(
+          tx,
+          task.projectId,
+          userId(request),
+          'TASK_UPDATED',
+          { title: result.title, changes: changed },
+          task.id,
+        );
+      return taskView(result);
     });
   });
   app.delete('/tasks/:taskId', async (request, reply) => {
@@ -228,6 +245,14 @@ export const tasksRoutes: FastifyPluginAsync = (app) => {
       const { task, member } = await taskAccess(tx, taskId, userId(request), true);
       if (member.role !== 'OWNER' && task.createdById !== userId(request))
         throw new AppError('FORBIDDEN');
+      await record(
+        tx,
+        task.projectId,
+        userId(request),
+        'TASK_DELETED',
+        { title: task.title },
+        task.id,
+      );
       await tx.task.delete({ where: { id: taskId } });
     });
     return reply.status(204).send();
@@ -249,13 +274,21 @@ export const tasksRoutes: FastifyPluginAsync = (app) => {
         data.afterTaskId,
         taskId,
       );
-      return taskView(
-        await tx.task.update({
-          where: { id: taskId },
-          data: { status: nextStatus, position: nextPosition },
-          include: taskInclude,
-        }),
-      );
+      const result = await tx.task.update({
+        where: { id: taskId },
+        data: { status: nextStatus, position: nextPosition },
+        include: taskInclude,
+      });
+      if (task.status !== nextStatus)
+        await record(
+          tx,
+          task.projectId,
+          userId(request),
+          'TASK_MOVED',
+          { title: task.title, from: task.status, to: nextStatus },
+          task.id,
+        );
+      return taskView(result);
     });
   });
   return Promise.resolve();

@@ -18,6 +18,7 @@ model User {
   assignedTasks Task[] @relation("Assignee")
   createdTasks Task[] @relation("Creator")
   comments Comment[]
+  activities Activity[]
   memberships ProjectMember[]
   refreshTokens RefreshToken[]
 
@@ -55,6 +56,7 @@ model Project {
   description String? @db.VarChar(2000)
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  activities Activity[]
   tasks Task[]
   members ProjectMember[]
   @@map("projects")
@@ -97,6 +99,7 @@ model Task {
  position String @db.VarChar(32)
  createdAt DateTime @default(now()) @db.Timestamptz(3)
  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+ activities Activity[]
  comments Comment[]
  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
  assignee User? @relation("Assignee", fields: [assigneeId], references: [id], onDelete: SetNull)
@@ -117,4 +120,32 @@ model Comment {
  author User? @relation(fields: [authorId], references: [id], onDelete: SetNull)
  @@index([taskId, createdAt, id])
  @@map("comments")
+}
+
+enum ActivityType {
+ PROJECT_CREATED
+ PROJECT_UPDATED
+ MEMBER_ADDED
+ MEMBER_REMOVED
+ MEMBER_ROLE_CHANGED
+ TASK_CREATED
+ TASK_UPDATED
+ TASK_MOVED
+ TASK_DELETED
+ COMMENT_ADDED
+}
+model Activity {
+ id String @id @default(uuid(7)) @db.Uuid
+ projectId String @db.Uuid
+ taskId String? @db.Uuid
+ actorId String? @db.Uuid
+ type ActivityType
+ data Json
+ createdAt DateTime @default(now()) @db.Timestamptz(3)
+ project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+ task Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+ actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+ @@index([projectId, createdAt, id])
+ @@index([taskId])
+ @@map("activities")
 }

@@ -1398,7 +1398,7 @@
           "Atividades"
         ],
         "summary": "Histórico do projeto (mais recentes primeiro)",
-        "x-status": "planned",
+        "x-status": "implemented",
         "security": [
           {
             "bearerAuth": []

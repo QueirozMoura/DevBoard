@@ -1,3 +1,4 @@
+import { record } from '../activities/activities.js';
 import { userId } from '../shared/core.js';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
@@ -43,14 +44,21 @@ export const commentsRoutes: FastifyPluginAsync = (app) => {
   app.post('/tasks/:taskId/comments', async (request, reply) => {
     const { taskId } = parse(z.object({ taskId: id }), request.params);
     const result = await app.prisma.$transaction(async (tx) => {
-      await taskAccess(tx, taskId, userId(request), true);
+      const { task } = await taskAccess(tx, taskId, userId(request), true);
       const data = parse(body, request.body);
-      return view(
-        await tx.comment.create({
-          data: { ...data, taskId, authorId: userId(request) },
-          include,
-        }),
+      const result = await tx.comment.create({
+        data: { ...data, taskId, authorId: userId(request) },
+        include,
+      });
+      await record(
+        tx,
+        task.projectId,
+        userId(request),
+        'COMMENT_ADDED',
+        { title: task.title, commentId: result.id },
+        task.id,
       );
+      return view(result);
     });
     return reply.status(201).send(result);
   });

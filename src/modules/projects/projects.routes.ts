@@ -1,3 +1,4 @@
+import { changes, record } from '../activities/activities.js';
 import { userId as actorIdOf } from '../shared/core.js';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
@@ -68,6 +69,7 @@ export const projectsRoutes: FastifyPluginAsync = (app) => {
           members: { create: { userId: actorIdOf(request), role: 'OWNER' } },
         },
       });
+      await record(tx, project.id, actorIdOf(request), 'PROJECT_CREATED');
       return projectView(tx, project.id, actorIdOf(request));
     });
     return reply.status(201).send(result);
@@ -84,7 +86,13 @@ export const projectsRoutes: FastifyPluginAsync = (app) => {
       await lockProject(tx, projectId);
       await membership(tx, projectId, actorIdOf(request), true);
       const data = parse(update, request.body);
+      const before = await tx.project.findUniqueOrThrow({ where: { id: projectId } });
       await tx.project.update({ where: { id: projectId }, data: defined(data) });
+      const changed = changes(before, defined(data));
+      if (changed.length)
+        await record(tx, projectId, actorIdOf(request), 'PROJECT_UPDATED', {
+          changes: changed,
+        });
       return projectView(tx, projectId, actorIdOf(request));
     });
   });
@@ -148,6 +156,11 @@ export const projectsRoutes: FastifyPluginAsync = (app) => {
       const member = await tx.projectMember.create({
         data: { projectId, userId: user.id, role: data.role },
       });
+      await record(tx, projectId, actorIdOf(request), 'MEMBER_ADDED', {
+        userId: user.id,
+        name: user.name,
+        role: member.role,
+      });
       return {
         userId: user.id,
         name: user.name,
@@ -181,7 +194,13 @@ export const projectsRoutes: FastifyPluginAsync = (app) => {
             (await tx.projectMember.count({ where: { projectId, role: 'OWNER' } })) === 1
           )
             throw new AppError('LAST_OWNER');
+          const targetUser = await tx.user.findUniqueOrThrow({ where: { id: userId } });
           if (!data) {
+            await record(tx, projectId, actorIdOf(request), 'MEMBER_REMOVED', {
+              userId,
+              name: targetUser.name,
+              role: target.role,
+            });
             await tx.task.updateMany({
               where: { projectId, assigneeId: userId },
               data: { assigneeId: null },
@@ -196,6 +215,13 @@ export const projectsRoutes: FastifyPluginAsync = (app) => {
             data,
             include: memberInclude,
           });
+          if (target.role !== member.role)
+            await record(tx, projectId, actorIdOf(request), 'MEMBER_ROLE_CHANGED', {
+              userId,
+              name: user.name,
+              from: target.role,
+              to: member.role,
+            });
           return { userId, ...user, role: member.role, joinedAt: member.joinedAt };
         });
         return result ?? reply.status(204).send();

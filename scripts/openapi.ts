@@ -843,7 +843,7 @@ const paths: Obj = {
       id: 'listActivities',
       tag: 'Atividades',
       summary: 'Histórico do projeto (mais recentes primeiro)',
-      status: 'planned',
+      status: 'implemented',
       description: 'Somente leitura. Ordem: createdAt desc, id desc.',
       role: 'MEMBER',
       params: [
