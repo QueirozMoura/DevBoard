@@ -24,6 +24,8 @@ import {
 } from '../../lib/taskDraft';
 import { useDeleteTask, useMoveTask, useUpdateTask } from '../../mutations';
 import { keys, useBoard, useTask } from '../../queries';
+import { ActivityList } from '../activity/ActivityList';
+import { CommentsSection } from '../comments/CommentsSection';
 import { TaskFields } from './TaskFields';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Board } from '../../api/types';
@@ -195,6 +197,21 @@ function TaskDetails({
           </Button>
         </div>
       </form>
+
+      <div className="border-line border-t pt-6">
+        <CommentsSection projectId={projectId} taskId={task.id} role={role} />
+      </div>
+
+      <section aria-labelledby="task-history" className="border-line border-t pt-6">
+        <h3 id="task-history" className="mb-3 text-base font-semibold">
+          Histórico
+        </h3>
+        <ActivityList
+          projectId={projectId}
+          taskId={task.id}
+          emptyText="As mudanças desta tarefa aparecem aqui."
+        />
+      </section>
 
       <ConfirmDialog
         open={deleting}

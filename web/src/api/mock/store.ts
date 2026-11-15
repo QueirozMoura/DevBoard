@@ -164,6 +164,38 @@ export function resetMockStore(me: MockUser): MockStore {
   add(site, 'Corrigir contraste do rodapé', 'TODO', 'LOW', me, null);
   add(site, 'Publicar política de privacidade', 'DONE', 'HIGH', me, -3);
 
+  const comments: Comment[] = [];
+  const seedComment = (
+    title: string,
+    author: MockUser,
+    body: string,
+    ago: number,
+  ): void => {
+    const task = tasks.find((candidate) => candidate.title === title);
+    if (!task) return;
+    comments.push({
+      id: nextId(),
+      taskId: task.id,
+      author: { id: author.id, name: author.name },
+      body,
+      createdAt: iso(-ago),
+      updatedAt: iso(-ago),
+    });
+    task.commentCount += 1;
+  };
+  seedComment(
+    'Integrar antifraude no checkout',
+    marina,
+    'Podemos usar o score do provedor no primeiro corte e ajustar o limite depois.',
+    2,
+  );
+  seedComment(
+    'Cache offline das listas',
+    marina,
+    'Vale medir antes com os 500 itens mais acessados.',
+    1,
+  );
+
   const activities: Activity[] = [];
   for (const [index, record] of [site, mobile, payments].entries()) {
     const owner = record.members.find((m) => m.role === 'OWNER') ?? record.members[0];
@@ -196,7 +228,7 @@ export function resetMockStore(me: MockUser): MockStore {
     people,
     projects: [site, mobile, payments],
     tasks,
-    comments: [],
+    comments,
     activities,
   };
   return store;
