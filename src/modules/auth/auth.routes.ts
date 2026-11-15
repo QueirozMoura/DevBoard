@@ -123,8 +123,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     schema: { response: { 200: tokenPairSchema } },
     handler: async (request, reply) => {
       const result = await session(request, reply);
-      if (result.refreshToken && result.expiresAt)
-        setCookie(reply, result.refreshToken, result.expiresAt);
+      if ('loggedOut' in result) throw new AppError('INVALID_REFRESH_TOKEN');
+      if (result.refreshToken) setCookie(reply, result.refreshToken, result.expiresAt);
       return reply.send(result);
     },
   });

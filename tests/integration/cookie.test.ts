@@ -1,3 +1,4 @@
+import { type Result } from '../helpers/api.js';
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
 import { buildApp } from '../../src/app.js';
 import { loadEnv } from '../../src/config/env.js';
@@ -40,7 +41,7 @@ it('valida Origin antes de consumir token, prioriza cookie e limpa no logout', a
   const logout = await app.inject({
     method: 'POST',
     url: '/api/v1/auth/logout',
-    headers: { ...headers, cookie: `refresh_token=${r.json().refreshToken}` },
+    headers: { ...headers, cookie: `refresh_token=${r.json<Result>().refreshToken}` },
     payload: {},
   });
   expect(logout.statusCode).toBe(204);

@@ -1,3 +1,4 @@
+import { userId as actorIdOf } from '../shared/core.js';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { AppError } from '../../plugins/errors.js';
@@ -39,22 +40,22 @@ async function projectView(tx: Tx, projectId: string, userId: string) {
     taskCount: _count.tasks,
   };
 }
-export const projectsRoutes: FastifyPluginAsync = async (app) => {
+export const projectsRoutes: FastifyPluginAsync = (app) => {
   app.addHook('onRequest', app.authenticate);
   app.get('/projects', async (request) => {
-    const userId = request.user!.id;
+    const actorId = actorIdOf(request);
     const query = parse(pageQuery.strict(), request.query);
     return app.prisma.$transaction(async (tx) => {
       const rows = await tx.project.findMany({
-        where: { members: { some: { userId } } },
+        where: { members: { some: { userId: actorId } } },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       });
-      const page = paginate(rows, query, ['projects', userId], app.env.JWT_SECRET, (p) =>
+      const page = paginate(rows, query, ['projects', actorId], app.env.JWT_SECRET, (p) =>
         descending(p.createdAt, p.id),
       );
       return {
         ...page,
-        items: await Promise.all(page.items.map((p) => projectView(tx, p.id, userId))),
+        items: await Promise.all(page.items.map((p) => projectView(tx, p.id, actorId))),
       };
     });
   });
@@ -64,32 +65,34 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
       const project = await tx.project.create({
         data: {
           ...defined(data),
-          members: { create: { userId: request.user!.id, role: 'OWNER' } },
+          members: { create: { userId: actorIdOf(request), role: 'OWNER' } },
         },
       });
-      return projectView(tx, project.id, request.user!.id);
+      return projectView(tx, project.id, actorIdOf(request));
     });
     return reply.status(201).send(result);
   });
   app.get('/projects/:projectId', async (request) => {
     const { projectId } = parse(z.object({ projectId: id }), request.params);
-    return app.prisma.$transaction((tx) => projectView(tx, projectId, request.user!.id));
+    return app.prisma.$transaction((tx) =>
+      projectView(tx, projectId, actorIdOf(request)),
+    );
   });
   app.patch('/projects/:projectId', async (request) => {
     const { projectId } = parse(z.object({ projectId: id }), request.params);
     return app.prisma.$transaction(async (tx) => {
       await lockProject(tx, projectId);
-      await membership(tx, projectId, request.user!.id, true);
+      await membership(tx, projectId, actorIdOf(request), true);
       const data = parse(update, request.body);
       await tx.project.update({ where: { id: projectId }, data: defined(data) });
-      return projectView(tx, projectId, request.user!.id);
+      return projectView(tx, projectId, actorIdOf(request));
     });
   });
   app.delete('/projects/:projectId', async (request, reply) => {
     const { projectId } = parse(z.object({ projectId: id }), request.params);
     await app.prisma.$transaction(async (tx) => {
       await lockProject(tx, projectId);
-      await membership(tx, projectId, request.user!.id, true);
+      await membership(tx, projectId, actorIdOf(request), true);
       await tx.project.delete({ where: { id: projectId } });
     });
     return reply.status(204).send();
@@ -98,7 +101,7 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
     const { projectId } = parse(z.object({ projectId: id }), request.params);
     const query = parse(pageQuery.strict(), request.query);
     return app.prisma.$transaction(async (tx) => {
-      await membership(tx, projectId, request.user!.id);
+      await membership(tx, projectId, actorIdOf(request));
       const rows = await tx.projectMember.findMany({
         where: { projectId },
         include: memberInclude,
@@ -107,7 +110,7 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
       const page = paginate(
         rows,
         query,
-        ['members', projectId, request.user!.id],
+        ['members', projectId, actorIdOf(request)],
         app.env.JWT_SECRET,
         (m) => ascending(m.joinedAt, m.userId),
       );
@@ -126,7 +129,7 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
     const { projectId } = parse(z.object({ projectId: id }), request.params);
     const result = await app.prisma.$transaction(async (tx) => {
       await lockProject(tx, projectId);
-      await membership(tx, projectId, request.user!.id, true);
+      await membership(tx, projectId, actorIdOf(request), true);
       const data = parse(
         z.strictObject({
           email: z.email().trim().toLowerCase().max(254),
@@ -166,7 +169,7 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
         );
         const result = await app.prisma.$transaction(async (tx) => {
           await lockProject(tx, projectId);
-          const actor = await membership(tx, projectId, request.user!.id);
+          const actor = await membership(tx, projectId, actorIdOf(request));
           if (actor.role !== 'OWNER' && (method === 'PATCH' || userId !== actor.userId))
             throw new AppError('FORBIDDEN');
           const target = await membership(tx, projectId, userId);
@@ -195,8 +198,9 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
           });
           return { userId, ...user, role: member.role, joinedAt: member.joinedAt };
         });
-        return result ? result : reply.status(204).send();
+        return result ?? reply.status(204).send();
       },
     });
   }
+  return Promise.resolve();
 };

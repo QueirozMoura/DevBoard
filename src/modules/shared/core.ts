@@ -20,7 +20,7 @@ export function parse<T>(schema: z.ZodType<T>, value: unknown): T {
     );
   return result.data;
 }
-export const nonempty = <T extends object>(value: T) => Object.keys(value).length > 0;
+export const nonempty = (value: object) => Object.keys(value).length > 0;
 export async function lockProject(tx: Tx, projectId: string) {
   await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${projectId}, 1))`;
 }
@@ -75,7 +75,10 @@ export function paginate<T>(
 }
 export const ascending = (date: Date, id: string) => `${date.toISOString()}:${id}`;
 export const descending = (date: Date, id: string) =>
-  `${String(9999999999999 - date.getTime()).padStart(13, '0')}:${[...id].map((c) => (c === '-' ? '-' : (15 - parseInt(c, 16)).toString(16))).join('')}`;
+  `${String(9999999999999 - date.getTime()).padStart(13, '0')}:${id
+    .split('')
+    .map((c) => (c === '-' ? '-' : (15 - parseInt(c, 16)).toString(16)))
+    .join('')}`;
 
 /** Strip absent Zod optionals before passing data to Prisma (exactOptionalPropertyTypes). */
 export function defined<T extends object>(
@@ -84,4 +87,14 @@ export function defined<T extends object>(
   return Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined)) as {
     [K in keyof T]: Exclude<T[K], undefined>;
   };
+}
+
+export function userId(request: { user: { id: string } | null }): string {
+  if (!request.user) throw new AppError('UNAUTHORIZED');
+  return request.user.id;
+}
+export function at<T>(rows: T[], index: number): T {
+  const row = rows[index];
+  if (row === undefined) throw new Error('Index out of range');
+  return row;
 }

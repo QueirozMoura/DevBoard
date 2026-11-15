@@ -1,3 +1,4 @@
+import { userId, at } from '../shared/core.js';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { AppError } from '../../plugins/errors.js';
@@ -45,7 +46,7 @@ const querySchema = pageQuery
   .extend(filters)
   .strict()
   .refine((v) => !(v.unassigned && v.assigneeId));
-const taskInclude = {} as const;
+const taskInclude = { _count: { select: { comments: true } } } as const;
 export async function taskAccess(tx: Tx, taskId: string, userId: string, lock = false) {
   const candidate = await tx.task.findUnique({ where: { id: taskId } });
   if (!candidate) throw new AppError('NOT_FOUND');
@@ -55,8 +56,9 @@ export async function taskAccess(tx: Tx, taskId: string, userId: string, lock = 
   if (!task) throw new AppError('NOT_FOUND');
   return { task, member };
 }
-export function taskView<T extends object>(task: T) {
-  return { ...task, commentCount: 0 };
+export function taskView<T extends { _count: { comments: number } }>(task: T) {
+  const { _count, ...result } = task;
+  return { ...result, commentCount: _count.comments };
 }
 async function assignee(tx: Tx, projectId: string, assigneeId?: string | null) {
   if (
@@ -88,13 +90,13 @@ async function position(
         ? 0
         : rows.findIndex((t) => t.id === afterTaskId) + 1;
   if (afterTaskId && index === 0) throw new AppError('INVALID_MOVE_TARGET');
-  const lower = index === 0 ? 0n : BigInt(rows[index - 1]!.position);
-  const upper = index === rows.length ? MAX : BigInt(rows[index]!.position);
+  const lower = index === 0 ? 0n : BigInt(at(rows, index - 1).position);
+  const upper = index === rows.length ? MAX : BigInt(at(rows, index).position);
   if (upper - lower > 1n) return rank((lower + upper) / 2n);
   const gap = MAX / BigInt(rows.length + 2);
   for (let i = 0; i < rows.length; i++)
     await tx.task.update({
-      where: { id: rows[i]!.id },
+      where: { id: at(rows, i).id },
       data: { position: rank(gap * BigInt(i + 1)) },
     });
   return rank(
@@ -105,7 +107,7 @@ async function position(
         : gap * BigInt(index) + gap / 2n,
   );
 }
-export const tasksRoutes: FastifyPluginAsync = async (app) => {
+export const tasksRoutes: FastifyPluginAsync = (app) => {
   app.addHook('onRequest', app.authenticate);
   const key = (t: { status: string; position: string; id: string }) =>
     `${statuses.indexOf(t.status as (typeof statuses)[number])}:${t.position}:${t.id}`;
@@ -113,7 +115,7 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
     const { projectId } = parse(z.object({ projectId: id }), request.params);
     const query = parse(querySchema, request.query);
     return app.prisma.$transaction(async (tx) => {
-      await membership(tx, projectId, request.user!.id);
+      await membership(tx, projectId, userId(request));
       const { limit, cursor, ...filter } = query;
       const rows = await tx.task.findMany({
         where: {
@@ -133,7 +135,7 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
       const page = paginate(
         rows,
         { limit, cursor },
-        ['tasks', projectId, request.user!.id, filter],
+        ['tasks', projectId, userId(request), filter],
         app.env.JWT_SECRET,
         key,
       );
@@ -150,7 +152,7 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
     );
     return app.prisma.$transaction(
       async (tx) => {
-        await membership(tx, projectId, request.user!.id);
+        await membership(tx, projectId, userId(request));
         const columns = [];
         for (const column of statuses) {
           const rows = await tx.task.findMany({
@@ -161,7 +163,7 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
           const page = paginate(
             rows,
             { limit: limitPerColumn },
-            ['tasks', projectId, request.user!.id, { status: column }],
+            ['tasks', projectId, userId(request), { status: column }],
             app.env.JWT_SECRET,
             key,
           );
@@ -182,7 +184,7 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
     const { projectId } = parse(z.object({ projectId: id }), request.params);
     const result = await app.prisma.$transaction(async (tx) => {
       await lockProject(tx, projectId);
-      await membership(tx, projectId, request.user!.id);
+      await membership(tx, projectId, userId(request));
       const data = parse(create, request.body);
       await assignee(tx, projectId, data.assigneeId);
       return taskView(
@@ -190,7 +192,7 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
           data: {
             ...defined(data),
             projectId,
-            createdById: request.user!.id,
+            createdById: userId(request),
             position: await position(tx, projectId, data.status, undefined),
           },
           include: taskInclude,
@@ -202,13 +204,13 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
   app.get('/tasks/:taskId', async (request) => {
     const { taskId } = parse(z.object({ taskId: id }), request.params);
     return app.prisma.$transaction(async (tx) =>
-      taskView((await taskAccess(tx, taskId, request.user!.id)).task),
+      taskView((await taskAccess(tx, taskId, userId(request))).task),
     );
   });
   app.patch('/tasks/:taskId', async (request) => {
     const { taskId } = parse(z.object({ taskId: id }), request.params);
     return app.prisma.$transaction(async (tx) => {
-      const { task } = await taskAccess(tx, taskId, request.user!.id, true);
+      const { task } = await taskAccess(tx, taskId, userId(request), true);
       const data = parse(patch, request.body);
       await assignee(tx, task.projectId, data.assigneeId);
       return taskView(
@@ -223,8 +225,8 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
   app.delete('/tasks/:taskId', async (request, reply) => {
     const { taskId } = parse(z.object({ taskId: id }), request.params);
     await app.prisma.$transaction(async (tx) => {
-      const { task, member } = await taskAccess(tx, taskId, request.user!.id, true);
-      if (member.role !== 'OWNER' && task.createdById !== request.user!.id)
+      const { task, member } = await taskAccess(tx, taskId, userId(request), true);
+      if (member.role !== 'OWNER' && task.createdById !== userId(request))
         throw new AppError('FORBIDDEN');
       await tx.task.delete({ where: { id: taskId } });
     });
@@ -233,7 +235,7 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
   app.post('/tasks/:taskId/move', async (request) => {
     const { taskId } = parse(z.object({ taskId: id }), request.params);
     return app.prisma.$transaction(async (tx) => {
-      const { task } = await taskAccess(tx, taskId, request.user!.id, true);
+      const { task } = await taskAccess(tx, taskId, userId(request), true);
       const data = parse(
         z.strictObject({ status: status.optional(), afterTaskId: id.nullable() }),
         request.body,
@@ -256,4 +258,5 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
       );
     });
   });
+  return Promise.resolve();
 };

@@ -1200,7 +1200,7 @@
           "Comentários"
         ],
         "summary": "Lista comentários (mais antigos primeiro)",
-        "x-status": "planned",
+        "x-status": "implemented",
         "security": [
           {
             "bearerAuth": []
@@ -1249,7 +1249,7 @@
           "Comentários"
         ],
         "summary": "Comenta",
-        "x-status": "planned",
+        "x-status": "implemented",
         "security": [
           {
             "bearerAuth": []
@@ -1304,7 +1304,7 @@
           "Comentários"
         ],
         "summary": "Edita o próprio comentário",
-        "x-status": "planned",
+        "x-status": "implemented",
         "security": [
           {
             "bearerAuth": []
@@ -1360,7 +1360,7 @@
           "Comentários"
         ],
         "summary": "Exclui (autor ou OWNER do projeto)",
-        "x-status": "planned",
+        "x-status": "implemented",
         "security": [
           {
             "bearerAuth": []

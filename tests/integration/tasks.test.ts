@@ -1,3 +1,4 @@
+import { at, type Result, type Page, type Board } from '../helpers/api.js';
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
 import { buildApp } from '../../src/app.js';
 import { loadEnv } from '../../src/config/env.js';
@@ -41,9 +42,10 @@ beforeEach(async () => {
   [owner, member, outsider] = (await Promise.all(
     users.map((u) => app.accessTokens.sign(u.id)),
   )) as [string, string, string];
-  memberId = users[1]!.id;
-  outsiderId = users[2]!.id;
-  projectId = (await req(owner, 'POST', '/projects', { name: 'project' })).json().id;
+  memberId = at(users, 1).id;
+  outsiderId = at(users, 2).id;
+  projectId = (await req(owner, 'POST', '/projects', { name: 'project' })).json<Result>()
+    .id;
   await req(owner, 'POST', `/projects/${projectId}/members`, {
     email: 'member@test.com',
   });
@@ -51,7 +53,7 @@ beforeEach(async () => {
 const create = async (title: string, extra: object = {}, token = owner) => {
   const r = await req(token, 'POST', `/projects/${projectId}/tasks`, { title, ...extra });
   expect(r.statusCode, r.body).toBe(201);
-  return r.json();
+  return r.json<Result>();
 };
 it('CRUD, filtros, validação, responsável e autorização aninhada', async () => {
   const a = await create(' Alpha ', { assigneeId: memberId, priority: 'HIGH' });
@@ -77,8 +79,9 @@ it('CRUD, filtros, validação, responsável e autorização aninhada', async ()
   ).toBe(400);
   expect((await req(member, 'PATCH', `/tasks/${a.id}`, {})).statusCode).toBe(400);
   expect(
-    (await req(member, 'PATCH', `/tasks/${a.id}`, { assigneeId: outsiderId })).json()
-      .error,
+    (
+      await req(member, 'PATCH', `/tasks/${a.id}`, { assigneeId: outsiderId })
+    ).json<Result>().error,
   ).toBe('INVALID_ASSIGNEE');
   await create('Beta', { status: 'DONE' });
   const list = (
@@ -87,11 +90,15 @@ it('CRUD, filtros, validação, responsável e autorização aninhada', async ()
       'GET',
       `/projects/${projectId}/tasks?priority=HIGH&q=alpha&assigneeId=${memberId}`,
     )
-  ).json();
+  ).json<Page>();
   expect(list.items.map((t: { id: string }) => t.id)).toEqual([a.id]);
   await req(owner, 'DELETE', `/projects/${projectId}/members/${memberId}`);
-  expect((await req(owner, 'GET', `/tasks/${a.id}`)).json().assigneeId).toBeNull();
-  expect((await req(owner, 'GET', `/projects/${projectId}`)).json().taskCount).toBe(2);
+  expect(
+    (await req(owner, 'GET', `/tasks/${a.id}`)).json<Result>().assigneeId,
+  ).toBeNull();
+  expect(
+    (await req(owner, 'GET', `/projects/${projectId}`)).json<Result>().taskCount,
+  ).toBe(2);
   expect((await req(owner, 'DELETE', `/tasks/${a.id}`)).statusCode).toBe(204);
 });
 it('board, cursor de coluna, rank e alvos inválidos', async () => {
@@ -101,36 +108,37 @@ it('board, cursor de coluna, rank e alvos inválidos', async () => {
     done = await create('done', { status: 'DONE' });
   const board = (
     await req(owner, 'GET', `/projects/${projectId}/board?limitPerColumn=1`)
-  ).json();
+  ).json<Board>();
   expect(board.columns.map((c: { status: string }) => c.status)).toEqual([
     'TODO',
     'IN_PROGRESS',
     'IN_REVIEW',
     'DONE',
   ]);
-  expect(board.columns[0]).toMatchObject({ total: 3, hasMore: true });
-  const cursor = board.columns[0].nextCursor;
+  expect(at(board.columns, 0)).toMatchObject({ total: 3, hasMore: true });
+  const cursor = at(board.columns, 0).nextCursor;
   expect(
     (await req(owner, 'GET', `/projects/${projectId}/tasks?status=TODO&cursor=${cursor}`))
-      .json()
+      .json<Page>()
       .items.map((t: { id: string }) => t.id),
   ).toEqual([b.id, c.id]);
   expect(
     (
       await req(owner, 'GET', `/projects/${projectId}/tasks?status=DONE&cursor=${cursor}`)
-    ).json().error,
+    ).json<Result>().error,
   ).toBe('INVALID_CURSOR');
   for (const target of [c.id, done.id])
     expect(
-      (await req(owner, 'POST', `/tasks/${c.id}/move`, { afterTaskId: target })).json()
-        .error,
+      (
+        await req(owner, 'POST', `/tasks/${c.id}/move`, { afterTaskId: target })
+      ).json<Result>().error,
     ).toBe('INVALID_MOVE_TARGET');
   expect(
     (await req(member, 'POST', `/tasks/${c.id}/move`, { afterTaskId: a.id })).statusCode,
   ).toBe(200);
   const tasks = (
     await req(owner, 'GET', `/projects/${projectId}/tasks?status=TODO`)
-  ).json().items;
+  ).json<Page>().items;
   expect(tasks.map((t: { id: string }) => t.id)).toEqual([a.id, c.id, b.id]);
   expect(new Set(tasks.map((t: { position: string }) => t.position)).size).toBe(3);
   expect(
@@ -139,7 +147,7 @@ it('board, cursor de coluna, rank e alvos inválidos', async () => {
         status: 'DONE',
         afterTaskId: null,
       })
-    ).json().status,
+    ).json<Result>().status,
   ).toBe('DONE');
 });
 it('serializa criação e movimentos entre instâncias sem ranks duplicados', async () => {
@@ -159,9 +167,10 @@ it('serializa criação e movimentos entre instâncias sem ranks duplicados', as
     ),
   );
   expect(moves.map((r) => r.statusCode)).toEqual(Array(8).fill(200));
-  const tasks = (await req(owner, 'GET', `/projects/${projectId}/tasks`)).json().items;
+  const tasks = (await req(owner, 'GET', `/projects/${projectId}/tasks`)).json<Page>()
+    .items;
   expect(new Set(tasks.map((t: { position: string }) => t.position)).size).toBe(9);
-  expect(tasks[0].id).toBe(anchor.id);
+  expect(at(tasks, 0).id).toBe(anchor.id);
 });
 it('rebalanceia ranks esgotados e rejeita alvo que saiu da coluna', async () => {
   const a = await create('a'),
