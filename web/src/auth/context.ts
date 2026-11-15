@@ -1,11 +1,16 @@
 import { createContext, useContext } from 'react';
 import type { User } from '../api/types';
 
-export type AuthStatus = 'loading' | 'authenticated' | 'anonymous';
+/** `unavailable`: a restauração falhou por motivo transitório (rede, 429, 5xx); o cookie pode estar válido. */
+export type AuthStatus = 'loading' | 'authenticated' | 'anonymous' | 'unavailable';
 
 export interface AuthContextValue {
   status: AuthStatus;
   user: User | null;
+  /** Erro da última tentativa de restaurar a sessão (quando `unavailable`). */
+  restoreError: unknown;
+  /** Tenta restaurar a sessão de novo. */
+  retryRestore: () => void;
   login: (input: { email: string; password: string }) => Promise<void>;
   register: (input: { name: string; email: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;

@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { isApiError } from '../api/errors';
 import { refreshSession } from '../api/http';
 import { setMockUser } from '../api/mock/router';
 import { authApi, usersApi } from '../api/endpoints';
@@ -11,6 +12,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<AuthStatus>('loading');
   const [user, setUserState] = useState<User | null>(null);
+  const [restoreError, setRestoreError] = useState<unknown>(null);
+  const [attempt, setAttempt] = useState(0);
 
   const adopt = useCallback((next: User) => {
     setMockUser(next);
@@ -26,6 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [queryClient]);
 
   // Restaura a sessão pelo cookie HttpOnly de refresh (o JS nunca vê esse token).
+  // Só uma resposta 401/403 é definitiva; rede, 429 e 5xx mantêm o cookie e oferecem retry.
   useEffect(() => {
     const run = { cancelled: false };
     void (async () => {
@@ -33,14 +37,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await refreshSession();
         const me = await usersApi.me();
         if (!run.cancelled) adopt(me);
-      } catch {
-        if (!run.cancelled) drop();
+      } catch (error) {
+        if (run.cancelled) return;
+        const definitive =
+          isApiError(error) && (error.status === 401 || error.status === 403);
+        if (definitive) {
+          drop();
+        } else {
+          setRestoreError(error);
+          setStatus('unavailable');
+        }
       }
     })();
     return () => {
       run.cancelled = true;
     };
-  }, [adopt, drop]);
+  }, [adopt, drop, attempt]);
+
+  const retryRestore = useCallback(() => {
+    setRestoreError(null);
+    setStatus('loading');
+    setAttempt((value) => value + 1);
+  }, []);
 
   // Falha definitiva de refresh em qualquer requisição → volta ao login.
   useEffect(() => onSessionExpired(drop), [drop]);
@@ -73,8 +91,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [drop]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ status, user, login, register, logout, setUser: adopt }),
-    [status, user, login, register, logout, adopt],
+    () => ({
+      status,
+      user,
+      restoreError,
+      retryRestore,
+      login,
+      register,
+      logout,
+      setUser: adopt,
+    }),
+    [status, user, restoreError, retryRestore, login, register, logout, adopt],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

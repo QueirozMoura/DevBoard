@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { tokenStore } from './api/tokenStore';
 import { renderApp, resetClientState, storageDump, stubFetch, USER } from './test/utils';
 
@@ -38,6 +38,59 @@ describe('sessão e rotas protegidas', () => {
     expect(calls[0]?.credentials).toBe('include');
     expect(tokenStore.get()).toBe('tok');
     expect(localStorage.length + sessionStorage.length).toBe(0);
+  });
+});
+
+describe('falha transitória ao restaurar a sessão', () => {
+  it('429 não desloga: mostra o motivo, e "Tentar novamente" restaura a sessão', async () => {
+    let refreshes = 0;
+    stubFetch((call) => {
+      if (refreshUrl(call.url)) {
+        refreshes += 1;
+        return refreshes === 1
+          ? {
+              status: 429,
+              headers: { 'Retry-After': '12' },
+              body: { error: 'RATE_LIMITED', message: 'x' },
+            }
+          : { body: { accessToken: 'tok' } };
+      }
+      if (call.url.endsWith('/api/v1/me')) return { body: USER };
+      return { status: 404, body: { error: 'NOT_FOUND', message: 'x' } };
+    });
+    renderApp('/');
+    const user = userEvent.setup();
+
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Não foi possível restaurar sua sessão',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Muitas tentativas. Tente de novo em 12 s.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Entrar' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Tentar novamente' }));
+
+    expect(await screen.findByRole('heading', { name: /Gustavo/ })).toBeInTheDocument();
+    expect(refreshes).toBe(2);
+  });
+
+  it('falha de rede também oferece nova tentativa em vez de ir ao login', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new TypeError('failed'))),
+    );
+    renderApp('/projects');
+    expect(
+      await screen.findByText(
+        'Não foi possível falar com o servidor. Verifique sua conexão.',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Entrar com outra conta' }),
+    ).toBeInTheDocument();
   });
 });
 
