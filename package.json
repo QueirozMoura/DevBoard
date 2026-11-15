@@ -11,7 +11,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tests/e2e",
     "openapi:generate": "tsx scripts/openapi.ts",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -25,7 +25,11 @@
     "db:migrate:test": "PRISMA_TARGET=test prisma migrate deploy",
     "db:status": "prisma migrate status",
     "db:validate": "prisma validate",
-    "openapi:validate": "redocly lint openapi.json --config redocly.yaml"
+    "openapi:validate": "redocly lint openapi.json --config redocly.yaml",
+    "test:e2e": "npm run db:migrate:test && playwright test",
+    "check:backend": "npm run format:check && npm run lint && npm run typecheck && npm run openapi:validate && npm run build",
+    "check:web": "npm --prefix web run format:check && npm --prefix web run lint && npm --prefix web run typecheck && npm --prefix web run build && npm --prefix web test",
+    "check": "npm run check:backend && npm run check:web && npm test && npm run test:e2e"
   },
   "license": "UNLICENSED",
   "type": "module",
@@ -43,6 +47,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@playwright/test": "1.65.1",
     "@redocly/cli": "2.78.0",
     "@types/node": "26.6.6",
     "@vitest/coverage-v8": "5.1.0",
