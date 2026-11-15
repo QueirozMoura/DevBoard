@@ -13,6 +13,7 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': { target: apiTarget, changeOrigin: false },
+      '/ready': { target: apiTarget, changeOrigin: false },
       '/health': { target: apiTarget, changeOrigin: false },
     },
   },

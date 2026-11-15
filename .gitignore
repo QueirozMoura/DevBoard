@@ -10,3 +10,5 @@ coverage/
 .vscode/
 *.tsbuildinfo
 src/generated/
+playwright-report/
+test-results/

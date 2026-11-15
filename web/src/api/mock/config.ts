@@ -1,9 +1,4 @@
-/**
- * Quais endpoints são simulados no navegador. Cada grupo corresponde a operações
- * `x-status: planned` do openapi.json. Quando o backend implementar um grupo, basta
- * removê-lo de `VITE_MOCKS` (ex.: `VITE_MOCKS=tasks,comments,activities`) — nenhum
- * código de tela muda. Em build de produção o padrão é `none`.
- */
+/** API real por padrão em desenvolvimento e produção. Mocks são opt-in via VITE_MOCKS. */
 export type MockGroup = 'projects' | 'members' | 'tasks' | 'comments' | 'activities';
 
 export const PLANNED_GROUPS: readonly MockGroup[] = [
@@ -15,7 +10,7 @@ export const PLANNED_GROUPS: readonly MockGroup[] = [
 ];
 
 function parse(value: string | undefined): Set<MockGroup> {
-  const text = (value ?? (import.meta.env.DEV ? 'planned' : 'none')).trim();
+  const text = (value ?? 'none').trim();
   if (text === 'none' || text === '') return new Set();
   if (text === 'planned' || text === 'all') return new Set(PLANNED_GROUPS);
   return new Set(

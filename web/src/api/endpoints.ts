@@ -55,7 +55,7 @@ export interface Paging {
   limit?: number | undefined;
 }
 
-/** Projetos — MOCK até o backend publicar (x-status: planned). */
+/** Projetos — API real (mocks opcionais para testes e demonstração). */
 export const projectsApi = {
   list: (paging: Paging = {}) =>
     request<Page<Project>>(`${V1}/projects`, { query: { ...paging } }),
@@ -68,7 +68,7 @@ export const projectsApi = {
     request<undefined>(`${V1}/projects/${projectId}`, { method: 'DELETE' }),
 };
 
-/** Membros — MOCK (planned). */
+/** Membros — API real. */
 export const membersApi = {
   list: (projectId: string, paging: Paging = {}) =>
     request<Page<Member>>(`${V1}/projects/${projectId}/members`, {
@@ -98,7 +98,7 @@ export interface TaskFilters extends Paging {
   q?: string | undefined;
 }
 
-/** Tarefas e quadro — MOCK (planned). */
+/** Tarefas e quadro — API real. */
 export const tasksApi = {
   board: (projectId: string, limitPerColumn?: number) =>
     request<Board>(`${V1}/projects/${projectId}/board`, { query: { limitPerColumn } }),
@@ -115,7 +115,7 @@ export const tasksApi = {
     request<Task>(`${V1}/tasks/${taskId}/move`, { method: 'POST', body: input }),
 };
 
-/** Comentários — MOCK (planned; já `implemented` no backend em desenvolvimento). */
+/** Comentários — API real. */
 export const commentsApi = {
   list: (taskId: string, paging: Paging = {}) =>
     request<Page<Comment>>(`${V1}/tasks/${taskId}/comments`, { query: { ...paging } }),
@@ -135,7 +135,7 @@ export interface ActivityFilters extends Paging {
   type?: ActivityType | undefined;
 }
 
-/** Atividades — MOCK (planned). */
+/** Atividades — API real. */
 export const activitiesApi = {
   list: (projectId: string, filters: ActivityFilters = {}) =>
     request<Page<Activity>>(`${V1}/projects/${projectId}/activities`, {

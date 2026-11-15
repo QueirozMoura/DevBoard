@@ -4,3 +4,6 @@ node_modules/
 package-lock.json
 src/generated/
 openapi.json
+web/
+playwright-report/
+test-results/
