@@ -2,9 +2,11 @@
 
 API REST de gerenciamento de projetos e tarefas (estilo Jira/Trello), construída como projeto de portfólio.
 
-**Status:** Fase 1.4 — cadastro, login, JWT, refresh token com rotação e logout. Perfil, projetos e tarefas ficam para as próximas fases.
+**Status:** Fase 1.5 — cadastro, login, JWT, refresh token com rotação, logout e perfil (`/me`). Projetos, tarefas, comentários e atividades têm contrato definido e estão em implementação incremental.
 
-Relatório da implementação e das verificações: [Fase 1.4](docs/fase-1.4.md).
+Relatórios: [Fase 1.4](docs/fase-1.4.md) · [Fase 1.5](docs/fase-1.5.md).
+
+**Contrato da API (frontend e backend):** [docs/api-contract.md](docs/api-contract.md) e [`openapi.json`](openapi.json) (gerado por `npm run openapi:generate`). Plano de migrations: [docs/migration-plan.md](docs/migration-plan.md). Migração do refresh token para cookie HttpOnly: [docs/refresh-cookie-migration.md](docs/refresh-cookie-migration.md).
 
 ## Stack
 
@@ -31,14 +33,15 @@ curl http://127.0.0.1:3000/health
 
 ## Scripts
 
-| Script                          | O que faz                                 |
-| ------------------------------- | ----------------------------------------- |
-| `npm run dev`                   | Servidor com reload (tsx watch)           |
-| `npm run build` / `npm start`   | Compila para `dist/` / executa o build    |
-| `npm run lint` · `format:check` | ESLint (strict, type-checked) · Prettier  |
-| `npm run typecheck`             | `tsc --noEmit`                            |
-| `npm test` · `test:coverage`    | Vitest                                    |
-| `npm run db:up` · `db:down`     | Sobe/derruba os bancos via podman-compose |
+| Script                          | O que faz                                      |
+| ------------------------------- | ---------------------------------------------- |
+| `npm run dev`                   | Servidor com reload (tsx watch)                |
+| `npm run build` / `npm start`   | Compila para `dist/` / executa o build         |
+| `npm run lint` · `format:check` | ESLint (strict, type-checked) · Prettier       |
+| `npm run typecheck`             | `tsc --noEmit`                                 |
+| `npm run openapi:generate`      | Regenera `openapi.json` (`scripts/openapi.ts`) |
+| `npm test` · `test:coverage`    | Vitest                                         |
+| `npm run db:up` · `db:down`     | Sobe/derruba os bancos via podman-compose      |
 
 ## Arquitetura inicial
 
@@ -154,6 +157,13 @@ JSON malformado mantém o erro genérico de transporte do Fastify (`400`). Token
 **Limitações:** logout/reuso revogam refresh tokens; JWTs já emitidos continuam válidos até expirar (até 15 minutos), pois a proteção de rotas permanece stateless. Não há rate limiting nem limpeza automática de registros expirados nesta fase. Uma futura política de limpeza deve preservar ancestrais enquanto houver sessão válida para não perder detecção de reuso. Perfil, projetos e tarefas não foram implementados ou alterados.
 
 Os testes de integração usam PostgreSQL real, incluindo duas instâncias da aplicação para concorrência, revogação de toda a família, isolamento entre sessões, rollback e ausência de segredos nos logs. A suíte anterior de cadastro/login/JWT permanece, com a expectativa da resposta de login atualizada para os dois tokens.
+
+## Perfil do usuário (Fase 1.5)
+
+Ambas as rotas exigem `Authorization: Bearer <accessToken>` e respondem com `Cache-Control: no-store`. Estão em `src/modules/users` e são publicadas diretamente em `/api/v1/me` (fora do prefixo `/auth`).
+
+- `GET /api/v1/me` → `200 { id, name, email, createdAt }`. Token válido de usuário removido → `401 USER_NOT_FOUND`.
+- `PATCH /api/v1/me` com `name` e/ou `email` (ao menos um; campos extras ou `id`, `passwordHash` etc. → `400 VALIDATION_ERROR`). E-mail normalizado (trim + minúsculas); e-mail de outro usuário → `409 EMAIL_ALREADY_EXISTS`, inclusive sob concorrência (a constraint UNIQUE decide).
 
 ## Decisões técnicas
 

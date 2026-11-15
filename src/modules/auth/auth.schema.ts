@@ -15,13 +15,6 @@ export const loginSchema = z.strictObject({
 
 export type LoginInput = z.infer<typeof loginSchema>;
 
-export const profilePatchSchema = z.strictObject({
-  name: z.string().trim().min(2).max(100).optional(),
-  email: registerSchema.shape.email.optional(),
-}).refine((value) => value.name !== undefined || value.email !== undefined);
-
-export type ProfilePatchInput = z.infer<typeof profilePatchSchema>;
-
 // 32 bytes em base64url canônico, sem padding e sem espaços.
 export const sessionSchema = z.strictObject({
   refreshToken: z.string().regex(/^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/),

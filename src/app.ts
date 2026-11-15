@@ -5,6 +5,7 @@ import { healthRoutes } from './modules/health/health.routes.js';
 import { registerAuthentication } from './plugins/authentication.js';
 import { registerErrorHandling } from './plugins/errors.js';
 import { registerPrisma } from './plugins/prisma.js';
+import { usersRoutes } from './modules/users/users.routes.js';
 
 /**
  * Monta a aplicação sem iniciar o servidor (facilita testes com app.inject()).
@@ -49,6 +50,7 @@ export function buildApp(
   registerAuthentication(app, env);
   void app.register(healthRoutes);
   void app.register(authRoutes, { prefix: '/api/v1/auth' });
+  void app.register(usersRoutes, { prefix: '/api/v1' });
 
   return app;
 }

@@ -11,8 +11,11 @@ const appErrors = {
 } as const;
 
 export class AppError extends Error {
-  constructor(readonly code: keyof typeof appErrors) {
-    super(appErrors[code].message);
+  constructor(
+    readonly code: keyof typeof appErrors,
+    message?: string,
+  ) {
+    super(message ?? appErrors[code].message);
   }
 }
 
