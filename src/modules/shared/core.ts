@@ -4,7 +4,7 @@ import type { Prisma } from '../../generated/prisma/client.js';
 import { AppError } from '../../plugins/errors.js';
 
 export type Tx = Prisma.TransactionClient;
-export const id = z.uuid();
+export const id = z.uuid().transform((value) => value.toLowerCase());
 export const role = z.enum(['OWNER', 'MEMBER']);
 export const pageQuery = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
@@ -30,6 +30,8 @@ export async function membership(
   userId: string,
   owner = false,
 ) {
+  // Readers hold a shared project lock until commit; removals/deletes use the exclusive lock.
+  await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock_shared(hashtextextended(${projectId}, 1))`;
   const member = await tx.projectMember.findUnique({
     where: { projectId_userId: { projectId, userId } },
   });
@@ -37,49 +39,72 @@ export async function membership(
   if (owner && member.role !== 'OWNER') throw new AppError('FORBIDDEN');
   return member;
 }
-// HMAC binds cursors to user, resource, filters and ordering. Limits may change between pages.
-export function paginate<T>(
-  rows: T[],
+// Signed cursors bind the ordering tuple to the authenticated user and exact query.
+export const datedKey = z.strictObject({ date: z.iso.datetime(), id: z.uuid() });
+export const taskKey = z.strictObject({
+  status: z.enum(['TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE']),
+  position: z.string().regex(/^\d{30}$/),
+  id: z.uuid(),
+});
+export function pagination<K>(
   query: { limit: number; cursor?: string | undefined },
   scope: unknown,
   secret: string,
-  key: (row: T) => string,
+  schema: z.ZodType<K>,
 ) {
   const binding = JSON.stringify(scope);
   const sign = (payload: string) =>
     createHmac('sha256', secret).update(binding).update(payload).digest('base64url');
-  let start = 0;
-  if (query.cursor) {
-    const [payload, signature, extra] = query.cursor.split('.');
-    const expected = payload ? sign(payload) : '';
+  let after: K | undefined;
+  if (query.cursor !== undefined) {
+    if (!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(query.cursor))
+      throw new AppError('INVALID_CURSOR');
+    const [payload, signature] = query.cursor.split('.');
     if (
       !payload ||
       !signature ||
-      extra ||
-      signature.length !== expected.length ||
-      !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
+      !timingSafeEqual(Buffer.from(signature), Buffer.from(sign(payload)))
     )
       throw new AppError('INVALID_CURSOR');
-    const last = Buffer.from(payload, 'base64url').toString();
-    // Compare immutable ordering tuples; continue even if the anchor was deleted.
-    start = rows.findIndex((row) => key(row) > last);
-    if (start === -1) start = rows.length;
+    try {
+      const parsed = schema.safeParse(
+        JSON.parse(Buffer.from(payload, 'base64url').toString()),
+      );
+      if (!parsed.success) throw new Error();
+      after = parsed.data;
+    } catch {
+      throw new AppError('INVALID_CURSOR');
+    }
   }
-  const items = rows.slice(start, start + query.limit);
-  const last = items.at(-1);
-  const payload = last ? Buffer.from(key(last)).toString('base64url') : '';
   return {
-    items,
-    nextCursor: start + items.length < rows.length ? `${payload}.${sign(payload)}` : null,
+    after,
+    take: query.limit + 1,
+    result<T>(rows: T[], key: (row: T) => K) {
+      const items = rows.slice(0, query.limit);
+      const last = items.at(-1);
+      const payload = last
+        ? Buffer.from(JSON.stringify(key(last))).toString('base64url')
+        : '';
+      return {
+        items,
+        nextCursor: rows.length > query.limit ? `${payload}.${sign(payload)}` : null,
+      };
+    },
   };
 }
-export const ascending = (date: Date, id: string) => `${date.toISOString()}:${id}`;
-export const descending = (date: Date, id: string) =>
-  `${String(9999999999999 - date.getTime()).padStart(13, '0')}:${id
-    .split('')
-    .map((c) => (c === '-' ? '-' : (15 - parseInt(c, 16)).toString(16)))
-    .join('')}`;
-
+export function datedAfter(
+  after: z.infer<typeof datedKey> | undefined,
+  field: 'createdAt' | 'joinedAt',
+  idField: 'id' | 'userId',
+  direction: 'asc' | 'desc',
+) {
+  if (!after) return {};
+  const op = direction === 'asc' ? 'gt' : 'lt';
+  const date = new Date(after.date);
+  return {
+    OR: [{ [field]: { [op]: date } }, { [field]: date, [idField]: { [op]: after.id } }],
+  };
+}
 /** Strip absent Zod optionals before passing data to Prisma (exactOptionalPropertyTypes). */
 export function defined<T extends object>(
   data: T,

@@ -5,14 +5,14 @@ import { z } from 'zod';
 import { AppError } from '../../plugins/errors.js';
 import {
   defined,
-  ascending,
-  descending,
+  datedKey,
+  datedAfter,
   id,
   lockProject,
   membership,
   nonempty,
   pageQuery,
-  paginate,
+  pagination,
   parse,
   role,
   type Tx,
@@ -46,14 +46,20 @@ export const projectsRoutes: FastifyPluginAsync = (app) => {
   app.get('/projects', async (request) => {
     const actorId = actorIdOf(request);
     const query = parse(pageQuery.strict(), request.query);
+    const pager = pagination(query, ['projects', actorId], app.env.JWT_SECRET, datedKey);
     return app.prisma.$transaction(async (tx) => {
       const rows = await tx.project.findMany({
-        where: { members: { some: { userId: actorId } } },
+        where: {
+          members: { some: { userId: actorId } },
+          ...datedAfter(pager.after, 'createdAt', 'id', 'desc'),
+        },
+        take: pager.take,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       });
-      const page = paginate(rows, query, ['projects', actorId], app.env.JWT_SECRET, (p) =>
-        descending(p.createdAt, p.id),
-      );
+      const page = pager.result(rows, (p) => ({
+        date: p.createdAt.toISOString(),
+        id: p.id,
+      }));
       return {
         ...page,
         items: await Promise.all(page.items.map((p) => projectView(tx, p.id, actorId))),
@@ -110,18 +116,23 @@ export const projectsRoutes: FastifyPluginAsync = (app) => {
     const query = parse(pageQuery.strict(), request.query);
     return app.prisma.$transaction(async (tx) => {
       await membership(tx, projectId, actorIdOf(request));
-      const rows = await tx.projectMember.findMany({
-        where: { projectId },
-        include: memberInclude,
-        orderBy: [{ joinedAt: 'asc' }, { userId: 'asc' }],
-      });
-      const page = paginate(
-        rows,
+      const pager = pagination(
         query,
         ['members', projectId, actorIdOf(request)],
         app.env.JWT_SECRET,
-        (m) => ascending(m.joinedAt, m.userId),
+        datedKey,
       );
+
+      const rows = await tx.projectMember.findMany({
+        where: { projectId, ...datedAfter(pager.after, 'joinedAt', 'userId', 'asc') },
+        take: pager.take,
+        include: memberInclude,
+        orderBy: [{ joinedAt: 'asc' }, { userId: 'asc' }],
+      });
+      const page = pager.result(rows, (m) => ({
+        date: m.joinedAt.toISOString(),
+        id: m.userId,
+      }));
       return {
         ...page,
         items: page.items.map(({ user, userId, role, joinedAt }) => ({
@@ -140,7 +151,7 @@ export const projectsRoutes: FastifyPluginAsync = (app) => {
       await membership(tx, projectId, actorIdOf(request), true);
       const data = parse(
         z.strictObject({
-          email: z.email().trim().toLowerCase().max(254),
+          email: z.string().trim().toLowerCase().max(254).pipe(z.email()),
           role: role.default('MEMBER'),
         }),
         request.body,

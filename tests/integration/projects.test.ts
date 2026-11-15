@@ -55,12 +55,12 @@ it('CRUD, isolamento, permissões, membros e último OWNER', async () => {
     ).json<Result>().error,
   ).toBe('INVITEE_NOT_FOUND');
   expect(
-    (await req(owner, 'POST', `${path}/members`, { email: 'member@test.com' }))
+    (await req(owner, 'POST', `${path}/members`, { email: ' MEMBER@test.com ' }))
       .statusCode,
   ).toBe(201);
   expect(
     (
-      await req(owner, 'POST', `${path}/members`, { email: 'member@test.com' })
+      await req(owner, 'POST', `${path}/members`, { email: ' MEMBER@test.com ' })
     ).json<Result>().error,
   ).toBe('ALREADY_MEMBER');
   expect((await req(member, 'PATCH', path, { name: 'hack' })).statusCode).toBe(403);
@@ -114,5 +114,14 @@ it('valida corpos e paginação vinculada ao usuário', async () => {
       .error,
   ).toBe('INVALID_CURSOR');
   expect((await req(owner, 'GET', '/projects?cursor=bad')).statusCode).toBe(400);
+  expect(
+    (
+      await req(
+        owner,
+        'GET',
+        `/projects?cursor=${encodeURIComponent('x.' + 'é'.repeat(43))}`,
+      )
+    ).json<Result>().error,
+  ).toBe('INVALID_CURSOR');
   expect((await req(owner, 'GET', '/projects?limit=101')).statusCode).toBe(400);
 });

@@ -3,7 +3,14 @@ import { userId } from '../shared/core.js';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { AppError } from '../../plugins/errors.js';
-import { ascending, id, pageQuery, paginate, parse } from '../shared/core.js';
+import {
+  datedKey,
+  datedAfter,
+  id,
+  pageQuery,
+  pagination,
+  parse,
+} from '../shared/core.js';
 import { taskAccess } from '../tasks/tasks.routes.js';
 
 const body = z.strictObject({ body: z.string().trim().min(1).max(5000) });
@@ -26,18 +33,23 @@ export const commentsRoutes: FastifyPluginAsync = (app) => {
     const query = parse(pageQuery.strict(), request.query);
     return app.prisma.$transaction(async (tx) => {
       await taskAccess(tx, taskId, userId(request));
-      const rows = await tx.comment.findMany({
-        where: { taskId },
-        include,
-        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      });
-      const page = paginate(
-        rows,
+      const pager = pagination(
         query,
         ['comments', taskId, userId(request)],
         app.env.JWT_SECRET,
-        (c) => ascending(c.createdAt, c.id),
+        datedKey,
       );
+
+      const rows = await tx.comment.findMany({
+        where: { taskId, ...datedAfter(pager.after, 'createdAt', 'id', 'asc') },
+        take: pager.take,
+        include,
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      });
+      const page = pager.result(rows, (c) => ({
+        date: c.createdAt.toISOString(),
+        id: c.id,
+      }));
       return { ...page, items: page.items.map(view) };
     });
   });

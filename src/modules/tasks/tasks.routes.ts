@@ -10,7 +10,8 @@ import {
   membership,
   nonempty,
   pageQuery,
-  paginate,
+  pagination,
+  taskKey,
   parse,
   type Tx,
 } from '../shared/core.js';
@@ -24,7 +25,7 @@ const fields = {
   priority: priority.optional(),
   assigneeId: id.nullable().optional(),
   dueDate: z.iso
-    .datetime()
+    .datetime({ offset: true })
     .transform((v) => new Date(v))
     .nullable()
     .optional(),
@@ -82,6 +83,7 @@ async function position(
 ): Promise<string> {
   const rows = await tx.task.findMany({
     where: { projectId, status: column, ...(excluded ? { id: { not: excluded } } : {}) },
+    select: { id: true, position: true },
     orderBy: [{ position: 'asc' }, { id: 'asc' }],
   });
   const index =
@@ -110,17 +112,37 @@ async function position(
 }
 export const tasksRoutes: FastifyPluginAsync = (app) => {
   app.addHook('onRequest', app.authenticate);
-  const key = (t: { status: string; position: string; id: string }) =>
-    `${statuses.indexOf(t.status as (typeof statuses)[number])}:${t.position}:${t.id}`;
+  const key = (t: {
+    status: (typeof statuses)[number];
+    position: string;
+    id: string;
+  }) => ({ status: t.status, position: t.position, id: t.id });
+  function afterTask(after: z.infer<typeof taskKey> | undefined) {
+    if (!after) return {};
+    return {
+      OR: [
+        { status: { in: statuses.slice(statuses.indexOf(after.status) + 1) } },
+        { status: after.status, position: { gt: after.position } },
+        { status: after.status, position: after.position, id: { gt: after.id } },
+      ],
+    };
+  }
   app.get('/projects/:projectId/tasks', async (request) => {
     const { projectId } = parse(z.object({ projectId: id }), request.params);
     const query = parse(querySchema, request.query);
     return app.prisma.$transaction(async (tx) => {
       await membership(tx, projectId, userId(request));
       const { limit, cursor, ...filter } = query;
+      const pager = pagination(
+        { limit, cursor },
+        ['tasks', projectId, userId(request), filter],
+        app.env.JWT_SECRET,
+        taskKey,
+      );
       const rows = await tx.task.findMany({
         where: {
           projectId,
+          ...afterTask(pager.after),
           ...defined({
             status: filter.status,
             priority: filter.priority,
@@ -130,16 +152,11 @@ export const tasksRoutes: FastifyPluginAsync = (app) => {
             ? { title: { contains: filter.q, mode: 'insensitive' as const } }
             : {}),
         },
+        take: pager.take,
         include: taskInclude,
         orderBy: [{ status: 'asc' }, { position: 'asc' }, { id: 'asc' }],
       });
-      const page = paginate(
-        rows,
-        { limit, cursor },
-        ['tasks', projectId, userId(request), filter],
-        app.env.JWT_SECRET,
-        key,
-      );
+      const page = pager.result(rows, key);
       return { ...page, items: page.items.map(taskView) };
     });
   });
@@ -156,22 +173,25 @@ export const tasksRoutes: FastifyPluginAsync = (app) => {
         await membership(tx, projectId, userId(request));
         const columns = [];
         for (const column of statuses) {
-          const rows = await tx.task.findMany({
-            where: { projectId, status: column },
-            include: taskInclude,
-            orderBy: [{ position: 'asc' }, { id: 'asc' }],
-          });
-          const page = paginate(
-            rows,
+          const pager = pagination(
             { limit: limitPerColumn },
             ['tasks', projectId, userId(request), { status: column }],
             app.env.JWT_SECRET,
-            key,
+            taskKey,
           );
+          const where = { projectId, status: column };
+          const rows = await tx.task.findMany({
+            where,
+            include: taskInclude,
+            orderBy: [{ position: 'asc' }, { id: 'asc' }],
+            take: pager.take,
+          });
+          const total = await tx.task.count({ where });
+          const page = pager.result(rows, key);
           columns.push({
             status: column,
             tasks: page.items.map(taskView),
-            total: rows.length,
+            total,
             hasMore: page.nextCursor !== null,
             nextCursor: page.nextCursor,
           });

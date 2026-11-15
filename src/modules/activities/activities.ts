@@ -2,11 +2,12 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { ActivityType, Prisma } from '../../generated/prisma/client.js';
 import {
-  descending,
+  datedKey,
+  datedAfter,
   id,
   membership,
   pageQuery,
-  paginate,
+  pagination,
   parse,
   userId,
   type Tx,
@@ -50,22 +51,28 @@ export const activitiesRoutes: FastifyPluginAsync = (app) => {
     );
     return app.prisma.$transaction(async (tx) => {
       await membership(tx, projectId, userId(request));
-      const rows = await tx.activity.findMany({
-        where: {
-          projectId,
-          ...(filter.taskId ? { taskId: filter.taskId } : {}),
-          ...(filter.type ? { type: filter.type } : {}),
-        },
-        include: { actor: { select: { id: true, name: true } } },
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      });
-      const page = paginate(
-        rows,
+      const pager = pagination(
         { limit, cursor },
         ['activities', projectId, userId(request), filter],
         app.env.JWT_SECRET,
-        (a) => descending(a.createdAt, a.id),
+        datedKey,
       );
+
+      const rows = await tx.activity.findMany({
+        where: {
+          projectId,
+          ...datedAfter(pager.after, 'createdAt', 'id', 'desc'),
+          ...(filter.taskId ? { taskId: filter.taskId } : {}),
+          ...(filter.type ? { type: filter.type } : {}),
+        },
+        take: pager.take,
+        include: { actor: { select: { id: true, name: true } } },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      });
+      const page = pager.result(rows, (a) => ({
+        date: a.createdAt.toISOString(),
+        id: a.id,
+      }));
       return {
         ...page,
         items: page.items.map((a) => ({

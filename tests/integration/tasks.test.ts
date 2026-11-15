@@ -187,3 +187,72 @@ it('rebalanceia ranks esgotados e rejeita alvo que saiu da coluna', async () => 
     (await req(owner, 'POST', `/tasks/${b.id}/move`, { afterTaskId: a.id })).statusCode,
   ).toBe(422);
 });
+
+it('isola referências de outro projeto e limpa campos anuláveis', async () => {
+  const foreign = (
+    await req(outsider, 'POST', '/projects', { name: 'foreign' })
+  ).json<Result>();
+  const foreignTask = (
+    await req(outsider, 'POST', `/projects/${foreign.id}/tasks`, { title: 'foreign' })
+  ).json<Result>();
+  const task = await create('dates', {
+    dueDate: '2026-11-15T12:00:00-03:00',
+    assigneeId: memberId,
+    description: 'description',
+  });
+  const invalid = await req(member, 'POST', `/tasks/${task.id}/move`, {
+    afterTaskId: foreignTask.id,
+  });
+  expect(invalid.json<Result>().error).toBe('INVALID_MOVE_TARGET');
+  const updated = await req(member, 'PATCH', `/tasks/${task.id}`, {
+    dueDate: null,
+    assigneeId: null,
+    description: null,
+  });
+  expect(updated.statusCode).toBe(200);
+  expect(updated.json()).toMatchObject({
+    dueDate: null,
+    assigneeId: null,
+    description: null,
+  });
+  expect(
+    (
+      await req(member, 'GET', `/projects/${projectId}/tasks?unassigned=true`)
+    ).json<Page>().items,
+  ).toHaveLength(1);
+  expect(
+    (
+      await req(
+        member,
+        'GET',
+        `/projects/${projectId}/tasks?unassigned=true&assigneeId=${memberId}`,
+      )
+    ).statusCode,
+  ).toBe(400);
+});
+it('remoção de membro concorrente com atribuição termina sem responsável removido', async () => {
+  const task = await create('race');
+  const results = await Promise.all([
+    req(owner, 'PATCH', `/tasks/${task.id}`, { assigneeId: memberId }, other),
+    req(owner, 'DELETE', `/projects/${projectId}/members/${memberId}`),
+  ]);
+  expect([200, 422]).toContain(at(results, 0).statusCode);
+  expect(at(results, 1).statusCode).toBe(204);
+  expect(
+    (await req(owner, 'GET', `/tasks/${task.id}`)).json<Result>().assigneeId,
+  ).toBeNull();
+  expect((await req(member, 'GET', `/tasks/${task.id}`)).statusCode).toBe(404);
+});
+it('cursor prossegue após exclusão do item âncora e cruza colunas', async () => {
+  const first = await create('first');
+  const second = await create('second', { status: 'DONE' });
+  const page = (
+    await req(owner, 'GET', `/projects/${projectId}/tasks?limit=1`)
+  ).json<Page>();
+  await req(owner, 'DELETE', `/tasks/${first.id}`);
+  const next = (
+    await req(owner, 'GET', `/projects/${projectId}/tasks?cursor=${page.nextCursor}`)
+  ).json<Page>();
+  expect(next.items.map((t) => t.id)).toEqual([second.id]);
+  expect(next.nextCursor).toBeNull();
+});
