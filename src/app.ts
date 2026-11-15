@@ -1,3 +1,4 @@
+import { registerHardening } from './plugins/hardening.js';
 import { projectsRoutes } from './modules/projects/projects.routes.js';
 import { tasksRoutes } from './modules/tasks/tasks.routes.js';
 import { commentsRoutes } from './modules/comments/comments.routes.js';
@@ -59,6 +60,7 @@ export function buildApp(
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Authorization', 'Content-Type'],
   });
+  registerHardening(app);
   registerErrorHandling(app);
   registerPrisma(app, env);
   registerAuthentication(app, env);

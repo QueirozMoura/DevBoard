@@ -1,3 +1,4 @@
+import { scheduleSessionCleanup } from './modules/auth/auth.cleanup.js';
 import { buildApp } from './app.js';
 import { loadEnv } from './config/env.js';
 
@@ -5,6 +6,7 @@ const SHUTDOWN_TIMEOUT_MS = 10_000;
 
 const env = loadEnv();
 const app = buildApp(env);
+scheduleSessionCleanup(app);
 
 let shuttingDown = false;
 

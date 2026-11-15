@@ -1,3 +1,4 @@
+import { emailRateKey } from '../../plugins/hardening.js';
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { AppError } from '../../plugins/errors.js';
 import { createDummyPasswordHash } from './auth.password.js';
@@ -28,6 +29,27 @@ const tokenPairSchema = {
 };
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
+  function limiter(keyGenerator: (request: FastifyRequest) => string) {
+    const check = app.createRateLimit({
+      max: app.env.RATE_LIMIT_AUTH_MAX,
+      timeWindow: 60000,
+      allowList: [],
+      keyGenerator,
+    });
+    return async (request: FastifyRequest, reply: FastifyReply) => {
+      reply.header('Cache-Control', 'no-store');
+      const result = await check(request);
+      if (!result.isAllowed && result.isExceeded) {
+        reply.header('Retry-After', result.ttlInSeconds);
+        throw new AppError('RATE_LIMITED');
+      }
+    };
+  }
+  app.addHook(
+    'onRequest',
+    limiter((r) => `auth:${r.ip}`),
+  );
+  const loginLimit = limiter((r) => `login:${emailRateKey(r.body)}`);
   app.addHook('onRequest', async (_request, reply) => {
     reply.header('Cache-Control', 'no-store');
   });
@@ -96,6 +118,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     },
   });
   app.post('/login', {
+    preHandler: loginLimit,
     schema: {
       response: {
         200: {

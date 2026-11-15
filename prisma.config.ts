@@ -12,6 +12,9 @@ try {
   // sem .env (ex.: CI): usa apenas o ambiente do processo
 }
 
+if (process.env.NODE_ENV === 'production')
+  throw new Error('Migrations locais permitidas somente em desenvolvimento/teste.');
+
 const isTest = process.env.PRISMA_TARGET === 'test';
 const varName = isTest ? 'TEST_DATABASE_URL' : 'DATABASE_URL';
 const url = process.env[varName];

@@ -1,0 +1,13 @@
+.git
+.env
+.env.*
+node_modules
+dist
+coverage
+web
+tests
+docs
+.agents
+.codex
+.aws
+src/generated

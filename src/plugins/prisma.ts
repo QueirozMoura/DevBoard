@@ -11,7 +11,13 @@ declare module 'fastify' {
 
 /** Cria o client sobre um pool `pg` (conecta de forma preguiçosa, no primeiro uso). */
 export function createPrismaClient(databaseUrl: string): PrismaClient {
-  return new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+  return new PrismaClient({
+    adapter: new PrismaPg({
+      connectionString: databaseUrl,
+      connectionTimeoutMillis: 2000,
+      statement_timeout: 10000,
+    }),
+  });
 }
 
 /**

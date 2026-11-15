@@ -14,6 +14,8 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     env: {
       NODE_ENV: 'test',
+      RATE_LIMIT_AUTH_MAX: '10000',
+      RATE_LIMIT_USER_MAX: '10000',
       LOG_LEVEL: 'silent',
       DATABASE_URL: testDatabaseUrl,
       // Chave efêmera exclusiva dos testes; nunca reutiliza a chave de desenvolvimento.

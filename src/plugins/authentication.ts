@@ -81,6 +81,14 @@ export function registerAuthentication(app: FastifyInstance, env: Env): void {
     const match = authorization?.match(/^Bearer (\S+)$/i);
     const token = match?.[1];
     if (!token || token.length > 8192) throw new AppError('UNAUTHORIZED');
-    request.user = await accessTokens.verify(token);
+    const user = await accessTokens.verify(token);
+    if (
+      !(await app.prisma.user.findUnique({
+        where: { id: user.id },
+        select: { id: true },
+      }))
+    )
+      throw new AppError('USER_NOT_FOUND');
+    request.user = user;
   });
 }
