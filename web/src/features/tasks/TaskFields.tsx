@@ -32,7 +32,7 @@ export function TaskFields({
       <TextField
         label="Título"
         name="title"
-        autoFocus={autoFocusTitle}
+        {...(autoFocusTitle ? { 'data-autofocus': true } : {})}
         maxLength={200}
         value={draft.title}
         error={errors.title}

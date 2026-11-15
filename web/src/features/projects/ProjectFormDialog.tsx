@@ -85,7 +85,7 @@ function ProjectForm({
       <TextField
         label="Nome"
         name="name"
-        autoFocus
+        data-autofocus
         value={name}
         maxLength={100}
         error={errors.name ?? serverFieldErrors.name}

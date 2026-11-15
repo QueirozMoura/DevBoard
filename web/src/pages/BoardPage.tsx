@@ -266,7 +266,7 @@ export function BoardPage() {
             setDragColumns(null);
           }}
         >
-          <div className="-mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-4 sm:-mx-8 sm:px-8 lg:mx-0 lg:grid lg:grid-cols-4 lg:overflow-visible lg:px-0">
+          <div className="relative -mx-4 flex snap-x gap-4 overflow-x-auto px-4 pb-4 sm:-mx-8 sm:px-8 lg:mx-0 lg:grid lg:grid-cols-4 lg:overflow-visible lg:px-0">
             {board.data.columns.map((column) => {
               const visible = columns[column.status].filter((task) =>
                 matchesFilters(task, filters),

@@ -62,6 +62,7 @@ describe('quadro Kanban', () => {
 
     await user.click(screen.getByRole('button', { name: 'Nova tarefa' }));
     const dialog = await screen.findByRole('dialog', { name: 'Nova tarefa' });
+    expect(within(dialog).getByLabelText('Título')).toHaveFocus();
     await user.type(within(dialog).getByLabelText('Título'), 'Revisar contrato do PSP');
     await user.selectOptions(within(dialog).getByLabelText('Prioridade'), 'HIGH');
     await user.selectOptions(

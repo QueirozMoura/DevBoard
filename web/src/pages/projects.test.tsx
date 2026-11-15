@@ -33,6 +33,8 @@ describe('projetos', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Novo projeto' }));
     const dialog = await screen.findByRole('dialog', { name: 'Novo projeto' });
+    // O foco vai para o campo Nome (e não para o botão Fechar), para já digitar.
+    expect(within(dialog).getByLabelText('Nome')).toHaveFocus();
     await user.type(within(dialog).getByLabelText('Nome'), '  Intranet  ');
     await user.type(within(dialog).getByLabelText('Descrição'), 'Portal interno');
     await user.click(within(dialog).getByRole('button', { name: 'Criar projeto' }));

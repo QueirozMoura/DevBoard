@@ -31,7 +31,25 @@ export function Modal({
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
+    if (open && !dialog.open) {
+      dialog.showModal();
+      // showModal() foca o primeiro elemento focável (o botão "Fechar") e o Chrome aplica
+      // esse foco inicial um frame depois; o campo marcado com data-autofocus precisa ficar
+      // com o foco para o usuário já poder digitar. Reaplicamos após o frame, sem roubar o
+      // foco caso a pessoa já esteja em outro campo do diálogo.
+      const target = dialog.querySelector<HTMLElement>('[data-autofocus]');
+      if (target) {
+        target.focus();
+        requestAnimationFrame(() => {
+          const active = document.activeElement;
+          const typing =
+            active instanceof HTMLElement &&
+            dialog.contains(active) &&
+            active.matches('input, textarea, select');
+          if (dialog.open && !typing) target.focus();
+        });
+      }
+    }
     if (!open && dialog.open) dialog.close();
   }, [open]);
 
