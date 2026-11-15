@@ -1,15 +1,34 @@
-import { FolderKanban } from 'lucide-react';
-import { Link } from 'react-router';
+import { FolderKanban, Plus } from 'lucide-react';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router';
+import { ProjectFormDialog } from '../features/projects/ProjectFormDialog';
+import { Button } from '../components/ui/Button';
 import { RoleBadge } from '../components/ui/Badge';
 import { EmptyState, ErrorState, Skeleton } from '../components/ui/states';
 import { useProjects } from '../queries';
 
-/** Etapa 1: listagem somente leitura. Criar/editar projetos chega na etapa 2. */
 export function ProjectsPage() {
   const query = useProjects();
+  const navigate = useNavigate();
+  const [creating, setCreating] = useState(false);
+  const newProject = (
+    <Button
+      icon={<Plus className="size-4" aria-hidden />}
+      onClick={() => {
+        setCreating(true);
+      }}
+    >
+      Novo projeto
+    </Button>
+  );
+
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Projetos</h1>
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold tracking-tight">Projetos</h1>
+        {query.data && query.data.items.length > 0 ? newProject : null}
+      </header>
+
       {query.error ? (
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
       ) : query.isPending ? (
@@ -21,8 +40,9 @@ export function ProjectsPage() {
       ) : query.data.items.length === 0 ? (
         <EmptyState
           icon={FolderKanban}
-          title="Nenhum projeto por aqui"
-          description="Os projetos dos quais você participa aparecem nesta lista."
+          title="Crie seu primeiro projeto"
+          description="Um projeto reúne tarefas em um quadro e os membros do time que trabalham nele."
+          action={newProject}
         />
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -40,13 +60,24 @@ export function ProjectsPage() {
                   {project.description ?? 'Sem descrição.'}
                 </p>
                 <p className="text-fg-faint mt-4 text-xs">
-                  {project.taskCount} tarefas · {project.memberCount} membros
+                  {project.taskCount} {project.taskCount === 1 ? 'tarefa' : 'tarefas'} ·{' '}
+                  {project.memberCount} {project.memberCount === 1 ? 'membro' : 'membros'}
                 </p>
               </Link>
             </li>
           ))}
         </ul>
       )}
+
+      <ProjectFormDialog
+        open={creating}
+        onClose={() => {
+          setCreating(false);
+        }}
+        onSaved={(project) => {
+          void navigate(`/projects/${project.id}`);
+        }}
+      />
     </div>
   );
 }

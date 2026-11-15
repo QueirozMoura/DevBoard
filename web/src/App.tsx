@@ -3,13 +3,17 @@ import { type ReactNode, useState } from 'react';
 import { createBrowserRouter, createMemoryRouter, RouterProvider } from 'react-router';
 import { isApiError } from './api/errors';
 import { AuthProvider } from './auth/AuthProvider';
+import { ToastProvider } from './components/ui/Toast';
 import { PublicOnly, RequireAuth } from './auth/RouteGuards';
 import { AppShell } from './layout/AppShell';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { ProfilePage } from './pages/ProfilePage';
-import { ProjectPage } from './pages/ProjectPage';
+import { ActivityPage } from './pages/ActivityPage';
+import { BoardPage } from './pages/BoardPage';
+import { MembersPage } from './pages/MembersPage';
+import { ProjectLayout } from './pages/ProjectLayout';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { RegisterPage } from './pages/RegisterPage';
 
@@ -29,7 +33,15 @@ export const routes = [
         children: [
           { index: true, element: <DashboardPage /> },
           { path: '/projects', element: <ProjectsPage /> },
-          { path: '/projects/:projectId', element: <ProjectPage /> },
+          {
+            path: '/projects/:projectId',
+            element: <ProjectLayout />,
+            children: [
+              { index: true, element: <BoardPage /> },
+              { path: 'members', element: <MembersPage /> },
+              { path: 'activity', element: <ActivityPage /> },
+            ],
+          },
           { path: '/profile', element: <ProfilePage /> },
           { path: '*', element: <NotFoundPage /> },
         ],
@@ -62,7 +74,9 @@ export function AppProviders({
 }) {
   return (
     <QueryClientProvider client={client}>
-      <AuthProvider>{children}</AuthProvider>
+      <ToastProvider>
+        <AuthProvider>{children}</AuthProvider>
+      </ToastProvider>
     </QueryClientProvider>
   );
 }

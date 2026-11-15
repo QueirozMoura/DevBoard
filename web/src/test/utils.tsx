@@ -82,3 +82,13 @@ export function storageDump(): string {
   }
   return parts.join('\n');
 }
+
+/** App autenticado: refresh/`/me` respondem pela "API"; todo o resto cai no mock. */
+export function renderLoggedIn(path: string) {
+  stubFetch((call) => {
+    if (call.url.endsWith('/auth/refresh')) return { body: { accessToken: 'tok' } };
+    if (call.url.endsWith('/api/v1/me')) return { body: USER };
+    return { status: 404, body: { error: 'NOT_FOUND', message: 'x' } };
+  });
+  return renderApp(path);
+}

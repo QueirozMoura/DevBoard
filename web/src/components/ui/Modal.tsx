@@ -6,7 +6,7 @@ interface ModalProps {
   open: boolean;
   onClose: () => void;
   title: string;
-  description?: string;
+  description?: string | undefined;
   /** `panel` = painel lateral (detalhes); `md`/`lg` = diálogo centralizado. */
   variant?: 'md' | 'lg' | 'panel';
   children: ReactNode;
