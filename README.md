@@ -2,7 +2,7 @@
 
 API REST de gerenciamento de projetos e tarefas (estilo Jira/Trello), construída como projeto de portfólio.
 
-**Status:** backend MVP M2–M5 implementado: projetos, membros, tarefas, board, comentários e histórico transacional. Refresh em cookie HttpOnly com compatibilidade legada, hardening e validação OpenAPI no CI. Relatório: [Backend MVP](docs/backend-mvp.md).
+**Status:** MVP integrado em `feat/integration-mvp`: backend M2–M5 e frontend React/Vite com API real por padrão. Cadastro/login, projetos, tarefas/Kanban, comentários e atividades verificados em Chromium com PostgreSQL real de teste. Guia: [integração](docs/integration-mvp.md).
 
 Relatórios: [Fase 1.4](docs/fase-1.4.md) · [Fase 1.5](docs/fase-1.5.md).
 
@@ -189,3 +189,33 @@ podman build --format docker -t devboard-backend:local .
 ```
 
 A imagem usa usuário `node`, build em estágios e healthcheck em `/ready`. Não executa migrations no boot. `/health` é liveness; `/ready` consulta o PostgreSQL e retorna 503 genérico quando indisponível. Variáveis mínimas: `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN`; configure HTTPS no proxy reverso. `trustProxy` está desativado: preserve Origin e configure IPs confiáveis antes de usar encaminhamento do IP real. Migrations locais recusam `NODE_ENV=production`; somente bancos de desenvolvimento/teste foram migrados nesta fase.
+
+## Executar o MVP integrado
+
+```bash
+npm ci
+npm ci --prefix web
+npm run db:up
+npm run db:migrate         # exclusivamente no banco de desenvolvimento local
+npm run dev               # terminal 1: API em localhost:3000
+npm --prefix web run dev   # terminal 2: frontend em http://localhost:5173
+```
+
+O frontend usa a API real por padrão; não é necessário criar um arquivo de ambiente.
+`web/.env.example` documenta as opções. O proxy Vite encaminha `/api`, `/health` e `/ready` à API,
+preservando cookies e Origin. Acesse `http://localhost:5173` (allowlist padrão do backend).
+Se alterar host/porta, ajuste `CORS_ORIGIN` à origem exata do navegador. Não misture localhost
+com 127.0.0.1. Mocks continuam disponíveis apenas explicitamente, por exemplo `VITE_MOCKS=all`.
+
+```bash
+npx playwright install chromium   # uma vez; em Linux CI use --with-deps
+npm run db:migrate:test
+npm run check                    # checks de ambos, testes backend/frontend e E2E reais
+```
+
+`npm run test:e2e` inicia seus próprios servidores (API 3101, Vite 5174), força
+`VITE_MOCKS=none` e usa somente `TEST_DATABASE_URL` com nome terminado em `_test`.
+As portas devem estar livres. Os testes não reutilizam servidores existentes e removem
+somente as contas/projetos que eles próprios criaram. O relatório HTML local é gerado
+em `playwright-report/` (ignorado pelo Git). O CI executa também frontend e Chromium;
+resultados de falhas são preservados como artefatos.
