@@ -74,7 +74,7 @@ export async function useSession(
         where: { id: token.id },
         data: { revokedAt: now, replacedById: replacement.id },
       });
-      return { accessToken, refreshToken: next.refreshToken };
+      return { accessToken, refreshToken: next.refreshToken, expiresAt: token.expiresAt };
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
   );

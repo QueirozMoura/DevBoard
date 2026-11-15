@@ -1,6 +1,6 @@
 # Migração do refresh token para cookie HttpOnly
 
-**Status:** desenho aprovado para implementação (não implementado). Hoje o refresh token trafega no corpo JSON e o cliente o guarda em memória, o que desloga o usuário a cada recarga. Objetivo: o JavaScript nunca vê o refresh token, e a sessão sobrevive ao reload.
+**Status:** Backend A implementado (cookie + legado); remoção do legado depende da migração do frontend. Antes desta fase, o refresh token trafega no corpo JSON e o cliente o guarda em memória, o que desloga o usuário a cada recarga. Objetivo: o JavaScript nunca vê o refresh token, e a sessão sobrevive ao reload.
 
 ## Garantias preservadas
 

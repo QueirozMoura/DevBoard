@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  CORS_ORIGIN: z.string().default('http://localhost:5173'),
   HOST: z.string().min(1).default('127.0.0.1'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   LOG_LEVEL: z
@@ -38,6 +39,23 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
 
   const env = result.data;
 
+  const origins = env.CORS_ORIGIN.split(',');
+  if (env.NODE_ENV === 'production' && !source.CORS_ORIGIN) {
+    throw new Error('CORS_ORIGIN obrigatória em produção');
+  }
+  for (const origin of origins) {
+    try {
+      const url = new URL(origin);
+      if (
+        url.origin !== origin ||
+        !['http:', 'https:'].includes(url.protocol) ||
+        (env.NODE_ENV === 'production' && url.protocol !== 'https:')
+      )
+        throw new Error();
+    } catch {
+      throw new Error('CORS_ORIGIN deve conter origens exatas válidas');
+    }
+  }
   // Guarda de isolamento: testes nunca podem rodar contra o banco de desenvolvimento.
   if (env.NODE_ENV === 'test') {
     const dbName = new URL(env.DATABASE_URL).pathname.slice(1);

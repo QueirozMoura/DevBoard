@@ -61,7 +61,7 @@ describe('refresh e logout (PostgreSQL real)', () => {
       payload: credentials,
     });
     expect(response.statusCode).toBe(200);
-    expect(response.headers['set-cookie']).toBeUndefined();
+    expect(response.headers['set-cookie']).toContain('HttpOnly');
     return response.json<Tokens>();
   };
   const request = (refreshToken: string, action = 'refresh', instance = app) =>
@@ -101,7 +101,7 @@ describe('refresh e logout (PostgreSQL real)', () => {
     const response = await request(initial.refreshToken);
     expect(response.statusCode).toBe(200);
     expect(response.headers['cache-control']).toBe('no-store');
-    expect(response.headers['set-cookie']).toBeUndefined();
+    expect(response.headers['set-cookie']).toContain('HttpOnly');
     const next = response.json<Tokens>();
     expect(Object.keys(next).sort()).toEqual(['accessToken', 'refreshToken']);
     expect(next.refreshToken).not.toBe(initial.refreshToken);

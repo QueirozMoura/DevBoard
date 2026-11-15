@@ -1,6 +1,16 @@
 import type { FastifyError, FastifyInstance } from 'fastify';
 
 const appErrors = {
+  CSRF_ORIGIN_REJECTED: { status: 403, message: 'Origem não permitida' },
+  FORBIDDEN: { status: 403, message: 'Permissão insuficiente' },
+  NOT_FOUND: { status: 404, message: 'Recurso não encontrado' },
+  INVITEE_NOT_FOUND: { status: 404, message: 'Usuário não encontrado' },
+  ALREADY_MEMBER: { status: 409, message: 'Usuário já é membro' },
+  LAST_OWNER: { status: 409, message: 'O projeto precisa de um OWNER' },
+  INVALID_ASSIGNEE: { status: 422, message: 'Responsável inválido' },
+  INVALID_MOVE_TARGET: { status: 422, message: 'Destino inválido' },
+  INVALID_CURSOR: { status: 400, message: 'Cursor inválido' },
+  RATE_LIMITED: { status: 429, message: 'Limite de requisições excedido' },
   VALIDATION_ERROR: { status: 400, message: 'Dados de cadastro inválidos' },
   EMAIL_ALREADY_EXISTS: { status: 409, message: 'E-mail já cadastrado' },
   LOGIN_VALIDATION_ERROR: { status: 400, message: 'Dados de login inválidos' },
@@ -14,6 +24,7 @@ export class AppError extends Error {
   constructor(
     readonly code: keyof typeof appErrors,
     message?: string,
+    readonly details?: { path: string; message: string }[],
   ) {
     super(message ?? appErrors[code].message);
   }
@@ -41,6 +52,7 @@ export function registerErrorHandling(app: FastifyInstance): void {
       void reply.status(appErrors[error.code].status).send({
         error: error.code,
         message: error.message,
+        ...(error.details ? { details: error.details } : {}),
       });
       return;
     }

@@ -1,3 +1,5 @@
+import cookie from '@fastify/cookie';
+import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import type { Env } from './config/env.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
@@ -45,6 +47,14 @@ export function buildApp(
     },
   });
 
+  app.decorate('env', env);
+  void app.register(cookie);
+  void app.register(cors, {
+    origin: env.CORS_ORIGIN.split(','),
+    credentials: true,
+    methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Authorization', 'Content-Type'],
+  });
   registerErrorHandling(app);
   registerPrisma(app, env);
   registerAuthentication(app, env);
@@ -53,4 +63,10 @@ export function buildApp(
   void app.register(usersRoutes, { prefix: '/api/v1' });
 
   return app;
+}
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    env: Env;
+  }
 }
