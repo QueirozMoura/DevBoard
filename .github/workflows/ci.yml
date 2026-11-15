@@ -35,6 +35,7 @@ jobs:
       - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm run openapi:validate
       - run: npm run db:migrate:test
       - run: npm test
       - run: npm run build

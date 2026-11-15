@@ -13,31 +13,90 @@
   ],
   "tags": [
     {
-      "name": "Infra"
+      "name": "Infra",
+      "description": "Infra — operações da API DevBoard."
     },
     {
-      "name": "Auth"
+      "name": "Auth",
+      "description": "Auth — operações da API DevBoard."
     },
     {
-      "name": "Perfil"
+      "name": "Perfil",
+      "description": "Perfil — operações da API DevBoard."
     },
     {
-      "name": "Projetos"
+      "name": "Projetos",
+      "description": "Projetos — operações da API DevBoard."
     },
     {
-      "name": "Membros"
+      "name": "Membros",
+      "description": "Membros — operações da API DevBoard."
     },
     {
-      "name": "Tarefas"
+      "name": "Tarefas",
+      "description": "Tarefas — operações da API DevBoard."
     },
     {
-      "name": "Comentários"
+      "name": "Comentários",
+      "description": "Comentários — operações da API DevBoard."
     },
     {
-      "name": "Atividades"
+      "name": "Atividades",
+      "description": "Atividades — operações da API DevBoard."
     }
   ],
   "paths": {
+    "/ready": {
+      "get": {
+        "operationId": "getReady",
+        "tags": [
+          "Infra"
+        ],
+        "summary": "Readiness PostgreSQL",
+        "x-status": "implemented",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Banco disponível.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "ready"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Banco indisponível.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "unavailable"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "operationId": "getHealth",
@@ -162,7 +221,7 @@
             "$ref": "#/components/responses/RateLimited"
           }
         },
-        "description": "Cria uma sessão (família de refresh tokens). Resposta com `Cache-Control: no-store`. Na versão final também define o cookie `refresh_token` (ver docs/refresh-cookie-migration.md).",
+        "description": "Cria uma sessão (família de refresh tokens). Resposta com `Cache-Control: no-store`. Define também o cookie `refresh_token` (ver docs/refresh-cookie-migration.md).",
         "requestBody": {
           "required": true,
           "content": {
@@ -213,7 +272,7 @@
             "$ref": "#/components/responses/RateLimited"
           }
         },
-        "description": "Reuso de token já rotacionado revoga toda a sessão (401). O cliente deve manter UMA chamada de refresh em andamento e reutilizá-la entre requisições concorrentes. Na versão final o token vem do cookie e o `Origin` é validado.",
+        "description": "Reuso de token já rotacionado revoga toda a sessão (401). O cliente deve manter UMA chamada de refresh em andamento e reutilizá-la entre requisições concorrentes. O cookie tem precedência; quando presente, exige Origin permitido, JSON e rejeita Sec-Fetch-Site cross-site. O corpo legado continua aceito.",
         "requestBody": {
           "required": false,
           "content": {
@@ -249,7 +308,7 @@
             "$ref": "#/components/responses/RateLimited"
           }
         },
-        "description": "Idempotente para tokens conhecidos. Na versão final limpa o cookie.",
+        "description": "Idempotente para tokens conhecidos. Limpa o cookie. Cookie exige Origin permitido; corpo legado continua aceito.",
         "requestBody": {
           "required": false,
           "content": {

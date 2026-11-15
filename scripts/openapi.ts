@@ -488,6 +488,31 @@ const T = pref('TaskId');
 const paged = [pref('Cursor'), pref('Limit')];
 
 const paths: Obj = {
+  '/ready': {
+    get: {
+      ...op({
+        id: 'getReady',
+        tag: 'Infra',
+        summary: 'Readiness PostgreSQL',
+        status: 'implemented',
+        auth: false,
+        success: [
+          '200',
+          ok('Banco disponível.', object({ status: { const: 'ready' } }, ['status'])),
+        ],
+      }),
+      responses: {
+        '200': ok(
+          'Banco disponível.',
+          object({ status: { const: 'ready' } }, ['status']),
+        ),
+        '503': ok(
+          'Banco indisponível.',
+          object({ status: { const: 'unavailable' } }, ['status']),
+        ),
+      },
+    },
+  },
   '/health': {
     get: op({
       id: 'getHealth',
@@ -533,7 +558,7 @@ const paths: Obj = {
       body: body(ref('LoginRequest')),
       description:
         'Cria uma sessão (família de refresh tokens). Resposta com `Cache-Control: no-store`. ' +
-        'Na versão final também define o cookie `refresh_token` (ver docs/refresh-cookie-migration.md).',
+        'Define também o cookie `refresh_token` (ver docs/refresh-cookie-migration.md).',
       success: [
         '200',
         { ...ok('Sessão criada.', ref('LoginResponse')), headers: NOCACHE },
@@ -551,8 +576,8 @@ const paths: Obj = {
       body: body(ref('RefreshRequest'), false),
       description:
         'Reuso de token já rotacionado revoga toda a sessão (401). O cliente deve manter UMA chamada de ' +
-        'refresh em andamento e reutilizá-la entre requisições concorrentes. Na versão final o token vem do ' +
-        'cookie e o `Origin` é validado.',
+        'refresh em andamento e reutilizá-la entre requisições concorrentes. O cookie tem precedência; ' +
+        'quando presente, exige Origin permitido, JSON e rejeita Sec-Fetch-Site cross-site. O corpo legado continua aceito.',
       success: ['200', { ...ok('Novo par.', ref('RefreshResponse')), headers: NOCACHE }],
       errors: ['InvalidCredentials', 'Forbidden'],
     }),
@@ -565,7 +590,8 @@ const paths: Obj = {
       status: 'implemented',
       auth: false,
       body: body(ref('RefreshRequest'), false),
-      description: 'Idempotente para tokens conhecidos. Na versão final limpa o cookie.',
+      description:
+        'Idempotente para tokens conhecidos. Limpa o cookie. Cookie exige Origin permitido; corpo legado continua aceito.',
       success: noContent,
       errors: ['InvalidCredentials', 'Forbidden'],
     }),
@@ -871,14 +897,14 @@ export function buildOpenApi(): Obj {
     },
     servers: [{ url: 'http://127.0.0.1:3000', description: 'Desenvolvimento local' }],
     tags: [
-      { name: 'Infra' },
-      { name: 'Auth' },
-      { name: 'Perfil' },
-      { name: 'Projetos' },
-      { name: 'Membros' },
-      { name: 'Tarefas' },
-      { name: 'Comentários' },
-      { name: 'Atividades' },
+      { name: 'Infra', description: 'Infra — operações da API DevBoard.' },
+      { name: 'Auth', description: 'Auth — operações da API DevBoard.' },
+      { name: 'Perfil', description: 'Perfil — operações da API DevBoard.' },
+      { name: 'Projetos', description: 'Projetos — operações da API DevBoard.' },
+      { name: 'Membros', description: 'Membros — operações da API DevBoard.' },
+      { name: 'Tarefas', description: 'Tarefas — operações da API DevBoard.' },
+      { name: 'Comentários', description: 'Comentários — operações da API DevBoard.' },
+      { name: 'Atividades', description: 'Atividades — operações da API DevBoard.' },
     ],
     paths,
     components: {

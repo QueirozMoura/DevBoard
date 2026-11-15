@@ -24,15 +24,16 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:test": "PRISMA_TARGET=test prisma migrate deploy",
     "db:status": "prisma migrate status",
-    "db:validate": "prisma validate"
+    "db:validate": "prisma validate",
+    "openapi:validate": "redocly lint openapi.json --config redocly.yaml"
   },
   "license": "UNLICENSED",
   "type": "module",
   "dependencies": {
-    "@fastify/cookie": "^11.0.2",
-    "@fastify/cors": "^11.1.0",
-    "@fastify/helmet": "^13.0.2",
-    "@fastify/rate-limit": "^10.3.0",
+    "@fastify/cookie": "11.0.2",
+    "@fastify/cors": "11.1.0",
+    "@fastify/helmet": "13.0.2",
+    "@fastify/rate-limit": "10.3.0",
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
     "argon2": "0.45.2",
@@ -42,6 +43,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@redocly/cli": "2.78.0",
     "@types/node": "26.6.6",
     "@vitest/coverage-v8": "5.1.0",
     "eslint": "10.14.0",
