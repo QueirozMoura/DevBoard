@@ -1,6 +1,7 @@
 import { arrayMove } from '@dnd-kit/sortable';
 import {
   type Board,
+  type Page,
   type Task,
   type TaskPriority,
   type TaskStatus,
@@ -166,4 +167,51 @@ export function matchesFilters(task: Task, filters: TaskFilters): boolean {
   if (filters.assignee === 'unassigned') return task.assigneeId === null;
   if (filters.assignee && task.assigneeId !== filters.assignee) return false;
   return true;
+}
+
+/** Acrescenta à coluna a próxima página (`GET …/tasks?status=&cursor=`), sem duplicar. */
+export function appendToColumn(
+  board: Board,
+  status: TaskStatus,
+  page: Page<Task>,
+): Board {
+  return {
+    columns: board.columns.map((column) => {
+      if (column.status !== status) return column;
+      const known = new Set(column.tasks.map((task) => task.id));
+      const fresh = page.items.filter((task) => !known.has(task.id));
+      return {
+        ...column,
+        tasks: [...column.tasks, ...fresh],
+        nextCursor: page.nextCursor,
+        hasMore: page.nextCursor !== null,
+      };
+    }),
+  };
+}
+
+export interface DropResult {
+  status: TaskStatus;
+  afterTaskId: string | null;
+}
+
+/**
+ * O que persistir ao soltar: coluna final e a tarefa imediatamente acima (`afterTaskId`).
+ * Devolve `null` quando a tarefa foi solta onde já estava (nada a salvar).
+ */
+export function dropResult(
+  original: Columns,
+  result: Columns,
+  taskId: string,
+): DropResult | null {
+  const status = findStatus(result, taskId);
+  if (!status) return null;
+  const afterTaskId = afterTaskIdOf(result, taskId);
+  if (
+    status === findStatus(original, taskId) &&
+    afterTaskId === afterTaskIdOf(original, taskId)
+  ) {
+    return null;
+  }
+  return { status, afterTaskId };
 }

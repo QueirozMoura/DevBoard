@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { Board, Task, TaskStatus } from '../api/types';
 import {
   afterTaskIdOf,
+  appendToColumn,
   applyMoveToBoard,
   columnId,
+  dropResult,
   type Columns,
   lastTaskIdOf,
   matchesFilters,
@@ -161,5 +163,53 @@ describe('ids de coluna e filtros', () => {
     expect(
       matchesFilters(task('y', 'TODO'), { ...NO_FILTERS, assignee: 'unassigned' }),
     ).toBe(true);
+  });
+});
+
+describe('carregar mais por coluna', () => {
+  it('acrescenta a próxima página sem duplicar e atualiza o cursor', () => {
+    const base = board();
+    const withMore: Board = {
+      columns: base.columns.map((c) =>
+        c.status === 'TODO' ? { ...c, total: 5, hasMore: true, nextCursor: 'c1' } : c,
+      ),
+    };
+    const next = appendToColumn(withMore, 'TODO', {
+      items: [task('c', 'TODO'), task('x', 'TODO'), task('y', 'TODO')],
+      nextCursor: null,
+    });
+    const todo = next.columns[0];
+    expect(todo?.tasks.map((t) => t.id)).toEqual(['a', 'b', 'c', 'x', 'y']);
+    expect(todo?.hasMore).toBe(false);
+    expect(todo?.nextCursor).toBeNull();
+    expect(next.columns[1]).toBe(withMore.columns[1]);
+  });
+});
+
+describe('resultado do arraste (o que vai para o POST /move)', () => {
+  it('devolve coluna e afterTaskId quando a posição mudou', () => {
+    const original = toColumns(board());
+    const moved = previewMove(original, 'a', 'd', true);
+    expect(dropResult(original, moved, 'a')).toEqual({
+      status: 'IN_PROGRESS',
+      afterTaskId: 'd',
+    });
+    const toTop = previewMove(original, 'c', 'a', false);
+    expect(dropResult(original, toTop, 'c')).toEqual({
+      status: 'TODO',
+      afterTaskId: null,
+    });
+    const toEmpty = previewMove(original, 'b', columnId('IN_REVIEW'));
+    expect(dropResult(original, toEmpty, 'b')).toEqual({
+      status: 'IN_REVIEW',
+      afterTaskId: null,
+    });
+  });
+  it('não persiste nada quando a tarefa volta ao mesmo lugar', () => {
+    const original = toColumns(board());
+    expect(dropResult(original, original, 'b')).toBeNull();
+    const there = previewMove(previewMove(original, 'b', 'd'), 'b', 'c', false);
+    expect(dropResult(original, there, 'b')).toBeNull();
+    expect(dropResult(original, original, 'inexistente')).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { membersApi, projectsApi, tasksApi } from './api/endpoints';
+import { commentsApi, membersApi, projectsApi, tasksApi } from './api/endpoints';
 
 /** Chaves de cache centralizadas; prefixos permitem invalidar por projeto/tarefa. */
 export const keys = {
@@ -11,6 +11,7 @@ export const keys = {
   myTasks: (projectId: string, userId: string) =>
     ['tasks', projectId, 'mine', userId] as const,
   tasksPrefix: (projectId: string) => ['tasks', projectId] as const,
+  task: (taskId: string) => ['task', taskId] as const,
   comments: (taskId: string) => ['comments', taskId] as const,
   activities: (projectId: string, taskId?: string) =>
     ['activities', projectId, taskId ?? 'all'] as const,
@@ -46,5 +47,21 @@ export function useBoard(projectId: string) {
   return useQuery({
     queryKey: keys.board(projectId),
     queryFn: () => tasksApi.board(projectId, BOARD_PAGE_SIZE),
+  });
+}
+
+export function useTask(taskId: string | null) {
+  return useQuery({
+    queryKey: keys.task(taskId ?? ''),
+    queryFn: () => tasksApi.get(taskId ?? ''),
+    enabled: taskId !== null,
+    retry: false,
+  });
+}
+
+export function useComments(taskId: string) {
+  return useQuery({
+    queryKey: keys.comments(taskId),
+    queryFn: () => commentsApi.list(taskId, { limit: 100 }),
   });
 }
