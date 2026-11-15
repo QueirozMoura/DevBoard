@@ -2,7 +2,7 @@
 
 API REST de gerenciamento de projetos e tarefas (estilo Jira/Trello), construída como projeto de portfólio.
 
-**Status:** Fase 1.5 — cadastro, login, JWT, refresh token com rotação, logout e perfil (`/me`). Projetos, tarefas, comentários e atividades têm contrato definido e estão em implementação incremental.
+**Status:** backend MVP M2–M5 implementado: projetos, membros, tarefas, board, comentários e histórico transacional. Refresh em cookie HttpOnly com compatibilidade legada, hardening e validação OpenAPI no CI. Relatório: [Backend MVP](docs/backend-mvp.md).
 
 Relatórios: [Fase 1.4](docs/fase-1.4.md) · [Fase 1.5](docs/fase-1.5.md).
 
@@ -115,13 +115,13 @@ app.get('/rota-futura', { onRequest: app.authenticate }, (request) => {
 
 O hook aceita somente `Authorization: Bearer <accessToken>` e disponibiliza `request.user = { id }`. Falta de token ou qualquer falha de validação retorna `401` com `{ "error": "UNAUTHORIZED", "message": "Autenticação necessária" }` e `WWW-Authenticate: Bearer`. A rota demonstrativa existe somente nos testes.
 
-Todas as rotas de autenticação respondem com `Cache-Control: no-store`, inclusive nas falhas. Não são criados cookies. Logs não incluem corpos, respostas, headers sensíveis ou parâmetros de query; erros inesperados registram somente código genérico.
+Todas as rotas de autenticação respondem com `Cache-Control: no-store`, inclusive nas falhas. Login e refresh definem `refresh_token` HttpOnly; os campos JSON legados continuam temporariamente disponíveis. Logs não incluem corpos, respostas, headers sensíveis ou parâmetros de query; erros inesperados registram somente código genérico.
 
 ## Refresh token e logout (Fase 1.4)
 
-Cada login cria uma sessão independente (família UUID). O refresh token é opaco: 32 bytes gerados por `node:crypto.randomBytes`, codificados em base64url canônico sem padding (43 caracteres, 256 bits). Somente seu SHA-256 hexadecimal é persistido em `refresh_tokens`; o token original existe apenas em memória e na resposta JSON. Não há segredo adicional para refresh tokens. A tabela e os índices existentes da Fase 1.1 já suportam esta implementação; nenhuma migration adicional é necessária.
+Cada login cria uma sessão independente (família UUID). O refresh token é opaco: 32 bytes gerados por `node:crypto.randomBytes`, codificados em base64url canônico sem padding (43 caracteres, 256 bits). Somente seu SHA-256 hexadecimal é persistido em `refresh_tokens`; o token original trafega em cookie HttpOnly e, durante a transição, também na resposta JSON. Não há segredo adicional para refresh tokens. A tabela e os índices existentes da Fase 1.1 já suportam esta implementação; nenhuma migration adicional é necessária.
 
-`POST /api/v1/auth/refresh` recebe exclusivamente JSON:
+`POST /api/v1/auth/refresh` usa cookie + corpo `{}` (`credentials: include`). Para compatibilidade temporária também aceita o corpo legado:
 
 ```json
 { "refreshToken": "token recebido no login ou no último refresh" }
@@ -144,17 +144,17 @@ Refresh expirado, desconhecido, revogado ou com formato/corpo inválido retorna 
 { "error": "INVALID_REFRESH_TOKEN", "message": "Sessão inválida ou expirada" }
 ```
 
-JSON malformado mantém o erro genérico de transporte do Fastify (`400`). Tokens em query, cookies ou Authorization não substituem o corpo exigido. Falhas do banco ou da assinatura retornam o erro interno genérico (`500`) sem registrar argumentos sensíveis.
+JSON malformado mantém o erro genérico de transporte do Fastify (`400`). Tokens em query ou Authorization são rejeitados. O cookie tem precedência sobre o corpo legado e exige Origin da allowlist, JSON e ausência de `Sec-Fetch-Site: cross-site`. Falhas do banco ou da assinatura retornam o erro interno genérico (`500`) sem registrar argumentos sensíveis.
 
 ### Contrato de armazenamento no cliente
 
-- Usar HTTPS fora do desenvolvimento local. Login e refresh entregam ambos os tokens no corpo JSON, sem cookies.
-- No navegador, manter os tokens **somente em memória**; não gravar em localStorage, sessionStorage, IndexedDB, URLs, analytics ou logs. Recarregar/fechar a página exige novo login. Não há frontend nesta fase; este é o contrato a ser seguido pelo cliente futuro.
-- Em cliente nativo, persistência opcional somente no armazenamento seguro do sistema operacional. O servidor armazena exclusivamente o hash.
-- Após refresh, substituir ambos os tokens em memória; após logout ou erro 401 de refresh, apagar os tokens e solicitar novo login. Coordenar refresh para impedir chamadas simultâneas.
-- Não se usa autenticação ambiente por cookies: o navegador não anexa o refresh token automaticamente, portanto este fluxo não necessita de token anti-CSRF. A API não habilita CORS e nunca aceita cookies como credencial. Mudar esse contrato para cookies exigirá implementar as proteções CSRF correspondentes. Memória não protege contra JavaScript malicioso em execução: o futuro cliente deve mitigar XSS.
+- Access token somente em memória; refresh token gerenciado pelo navegador em cookie HttpOnly, SameSite=Strict, Path=/api/v1/auth, Secure em produção, sem Domain.
+- Login, refresh e logout com `credentials: 'include'`; refresh/logout enviam `{}` e `Origin` permitido em `CORS_ORIGIN`.
+- O campo JSON `refreshToken` continua temporariamente disponível, deprecated. O frontend deve descartá-lo. Não usar localStorage/sessionStorage para tokens.
+- Uma única operação de refresh em andamento; reuso revoga a família. Logout/401 de refresh limpa a sessão no cliente.
+- Frontend e API devem estar no mesmo site para SameSite=Strict. Produção exige HTTPS no proxy e CORS_ORIGIN explícito com origens HTTPS exatas.
 
-**Limitações:** logout/reuso revogam refresh tokens; JWTs já emitidos continuam válidos até expirar (até 15 minutos), pois a proteção de rotas permanece stateless. Não há rate limiting nem limpeza automática de registros expirados nesta fase. Uma futura política de limpeza deve preservar ancestrais enquanto houver sessão válida para não perder detecção de reuso. Perfil, projetos e tarefas não foram implementados ou alterados.
+JWTs já emitidos seguem válidos até expirar (15 minutos), com checagem de existência da conta a cada requisição autenticada. A limpeza horária remove até 1000 tokens expirados por execução, preservando todos os ancestrais de famílias ainda válidas. Limites por instância: auth 10/min por IP, login também por e-mail; dados 300/min por usuário. Mais detalhes em [contrato](docs/api-contract.md).
 
 Os testes de integração usam PostgreSQL real, incluindo duas instâncias da aplicação para concorrência, revogação de toda a família, isolamento entre sessões, rollback e ausência de segredos nos logs. A suíte anterior de cadastro/login/JWT permanece, com a expectativa da resposta de login atualizada para os dois tokens.
 
@@ -176,3 +176,16 @@ Ambas as rotas exigem `Authorization: Bearer <accessToken>` e respondem com `Cac
 - **Logs estruturados** com pino (embutido no Fastify), com `authorization`/`cookie`, corpo, campos de senha, tokens e segredos redigidos; parâmetros de query não aparecem no log da requisição. Erros inesperados registram somente um código genérico, sem argumentos de queries ou stack sensível.
 - **Variáveis de ambiente** carregadas com `--env-file-if-exists` do Node (sem dotenv).
 - **Podman:** `compose.yaml` usa nomes de imagem totalmente qualificados e publica portas só em `127.0.0.1`.
+
+## Backend MVP: execução e imagem
+
+Projetos, membros, tarefas, board, movimentos, comentários e atividades estão disponíveis em `/api/v1` conforme `openapi.json`. O servidor controla ranks e usa advisory locks no PostgreSQL para autorizações e alterações concorrentes. A paginação usa consultas limitadas e cursores assinados vinculados à consulta e ao usuário.
+
+```bash
+npm run db:migrate:test   # somente devboard_test
+npm run openapi:validate # Redocly CLI 2.78.0 fixado
+npm test
+podman build --format docker -t devboard-backend:local .
+```
+
+A imagem usa usuário `node`, build em estágios e healthcheck em `/ready`. Não executa migrations no boot. `/health` é liveness; `/ready` consulta o PostgreSQL e retorna 503 genérico quando indisponível. Variáveis mínimas: `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN`; configure HTTPS no proxy reverso. `trustProxy` está desativado: preserve Origin e configure IPs confiáveis antes de usar encaminhamento do IP real. Migrations locais recusam `NODE_ENV=production`; somente bancos de desenvolvimento/teste foram migrados nesta fase.

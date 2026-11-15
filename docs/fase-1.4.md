@@ -21,11 +21,11 @@ Foi preservada a organização Fastify → módulos de domínio → Prisma/Postg
 
 ## Contrato do cliente e CSRF
 
-Os tokens são entregues exclusivamente por JSON, sem cookies, e exigem HTTPS fora do desenvolvimento local. No navegador, ambos devem ficar somente em memória; recarregar a página exige novo login. Não usar localStorage, sessionStorage, IndexedDB, URLs ou logs. Clientes nativos podem usar armazenamento seguro do sistema operacional.
+Atualização no backend MVP: implementado Backend A de [refresh-cookie-migration.md](refresh-cookie-migration.md). Login/refresh definem `refresh_token` HttpOnly, SameSite=Strict, Path=/api/v1/auth, Secure em produção. O access token fica em memória; o refresh é gerenciado pelo navegador. Os campos JSON legados ainda são aceitos/devolvidos temporariamente, mas o frontend deve descartá-los.
 
-O cliente substitui o par após cada refresh e elimina os tokens após logout ou `401` de refresh. Deve coordenar uma única chamada de refresh compartilhada, inclusive entre consumidores concorrentes. Cookies, query e Authorization não substituem o corpo do refresh/logout.
+Use `credentials: 'include'` e corpo `{}` no refresh/logout. Quando há cookie, Origin da allowlist é obrigatório; cross-site é rejeitado. A rejeição não consome a sessão. CORS responde apenas às origens exatas configuradas. Não guardar tokens em localStorage/sessionStorage/URLs/logs. Mantenha uma única chamada de refresh compartilhada.
 
-Não há credencial anexada automaticamente pelo navegador, nem CORS habilitado. O contrato sem cookies não exige token anti-CSRF. Uma futura alteração para cookies precisará implementar as proteções correspondentes. Armazenamento em memória não impede acesso por JavaScript malicioso; o cliente futuro precisa mitigar XSS.
+As demais seções deste arquivo registram o estado histórico da Fase 1.4. Estado atual e validações em [backend-mvp.md](backend-mvp.md).
 
 ## Arquivos alterados ou adicionados
 

@@ -4,15 +4,15 @@ Fonte de verdade legível por máquina: [`openapi.json`](../openapi.json), gerad
 
 ## 1. Estado dos contratos (para o frontend)
 
-| Grupo                | Rotas                                                              | Servidor  | Uso pelo frontend                                                |
-| -------------------- | ------------------------------------------------------------------ | --------- | ---------------------------------------------------------------- |
-| Infra                | `GET /health`                                                      | pronto    | real                                                             |
-| Auth                 | `POST /api/v1/auth/{register,login,refresh,logout}`                | pronto    | real. **Transporte do refresh muda** (§3): siga o contrato final |
-| Perfil               | `GET/PATCH /api/v1/me`                                             | pronto    | real                                                             |
-| Projetos, membros    | `/api/v1/projects…`                                                | planejado | **mock** — contrato estável                                      |
-| Tarefas, board, move | `/api/v1/projects/{id}/{board,tasks}`, `/api/v1/tasks/{id}[/move]` | planejado | **mock** — contrato estável                                      |
-| Comentários          | `/api/v1/tasks/{id}/comments`, `/api/v1/comments/{id}`             | planejado | **mock** — contrato estável                                      |
-| Atividades           | `GET /api/v1/projects/{id}/activities`                             | planejado | **mock** — contrato estável                                      |
+| Grupo                | Rotas                                                              | Servidor | Uso pelo frontend                                                |
+| -------------------- | ------------------------------------------------------------------ | -------- | ---------------------------------------------------------------- |
+| Infra                | `GET /health`                                                      | pronto   | real                                                             |
+| Auth                 | `POST /api/v1/auth/{register,login,refresh,logout}`                | pronto   | real. **Transporte do refresh muda** (§3): siga o contrato final |
+| Perfil               | `GET/PATCH /api/v1/me`                                             | pronto   | real                                                             |
+| Projetos, membros    | `/api/v1/projects…`                                                | pronto   | real — contrato implementado                                     |
+| Tarefas, board, move | `/api/v1/projects/{id}/{board,tasks}`, `/api/v1/tasks/{id}[/move]` | pronto   | real — contrato implementado                                     |
+| Comentários          | `/api/v1/tasks/{id}/comments`, `/api/v1/comments/{id}`             | pronto   | real — contrato implementado                                     |
+| Atividades           | `GET /api/v1/projects/{id}/activities`                             | pronto   | real — contrato implementado                                     |
 
 "Estável" significa: mudanças incompatíveis exigem aviso explícito e atualização deste documento; mudanças compatíveis (campos novos opcionais na resposta) podem ocorrer — o cliente deve **ignorar campos desconhecidos**. Cada operação tem `x-status` (`implemented`/`planned`) e `x-required-role`.
 
@@ -59,7 +59,7 @@ Fonte de verdade legível por máquina: [`openapi.json`](../openapi.json), gerad
 
 `?limit=1..100` (padrão 20) e `?cursor=<opaco>`. Resposta: `{ "items": [...], "nextCursor": "..." | null }`. `nextCursor: null` = fim. O cursor é opaco, vinculado à consulta (filtros/ordem) e **não deve ser construído nem alterado** pelo cliente. Ordenação de cada lista está na descrição da operação. Não há `total` (exceto `taskCount`/`memberCount` em `Project` e `total` por coluna do board).
 
-### Limites de taxa (planejado, Fase 5)
+### Limites de taxa (implementado, por instância)
 
 Endpoints `/auth/*`: 10 req/min por IP (login também por e-mail). Demais: 300 req/min por usuário. Excesso → `429 RATE_LIMITED` + `Retry-After`.
 
@@ -134,4 +134,15 @@ npm run openapi:generate        # regenera openapi.json a partir de scripts/open
 npx vitest run tests/integration/openapi.test.ts
 ```
 
-O teste verifica: sincronismo gerador↔arquivo, `$ref`s resolvíveis, `operationId` únicos, parâmetros de caminho declarados, `required` ⊆ `properties`, ao menos uma resposta 2xx por operação e que `x-status: implemented` coincide exatamente com as rotas registradas no Fastify. Não substitui um validador OpenAPI completo (ver pendências no relatório da fase).
+O teste verifica: sincronismo gerador↔arquivo, `$ref`s resolvíveis, `operationId` únicos, parâmetros de caminho declarados, `required` ⊆ `properties`, ao menos uma resposta 2xx por operação e que `x-status: implemented` coincide exatamente com as rotas registradas no Fastify. Complementa o validador estrutural OpenAPI 3.1: `npm run openapi:validate` usa Redocly CLI 2.78.0 fixado e está integrado ao CI.
+
+## 7. Adições de infraestrutura (registradas antes da implementação)
+
+- `GET /ready`: readiness com consulta PostgreSQL; `200 {"status":"ready"}` ou
+  `503 {"status":"unavailable"}` sem detalhes internos. `/health` continua liveness.
+- Limites em memória por instância: auth 10/min por IP e login também por e-mail
+  normalizado; dados 300/min por usuário. Instâncias adicionais multiplicam o teto;
+  um armazenamento compartilhado será necessário para um teto global no cluster.
+- HTTPS termina no proxy reverso em produção. A API emite `Secure` com base em
+  `NODE_ENV`; `trustProxy` permanece desativado. O proxy deve preservar `Origin` e
+  encaminhar o IP real de forma controlada antes de habilitar confiança em proxies.
