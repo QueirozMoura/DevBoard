@@ -1,0 +1,97 @@
+@import '@fontsource-variable/schibsted-grotesk';
+@import 'tailwindcss';
+
+/*
+ * Identidade DevBoard: azul-tinta profundo (não preto) com cobalto como único acento.
+ * As quatro cores de status espelham as colunas do quadro e são usadas só para status.
+ */
+@theme {
+  --font-sans: 'Schibsted Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
+
+  --color-ink-950: #080d1a;
+  --color-ink-900: #0d1426;
+  --color-ink-850: #121b33;
+  --color-ink-800: #18233f;
+  --color-ink-700: #223156;
+  --color-line: #1d2a49;
+
+  --color-fg: #e8edfb;
+  --color-fg-muted: #94a1c4;
+  --color-fg-faint: #7585ae;
+
+  --color-cobalt-300: #9dbbff;
+  --color-cobalt-400: #6b9aff;
+  --color-cobalt-500: #3d7bff;
+  --color-cobalt-600: #2a62e0;
+
+  --color-st-todo: #94a1c4;
+  --color-st-progress: #3d7bff;
+  --color-st-review: #f2b84b;
+  --color-st-done: #38d6a0;
+  --color-danger: #ff6b7a;
+
+  --radius-control: 0.5rem;
+  --radius-panel: 0.875rem;
+
+  --animate-settle: settle 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-hop: hop 6s cubic-bezier(0.65, 0, 0.35, 1) 900ms infinite;
+
+  @keyframes settle {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  /* Um cartão atravessa as colunas e volta: o único movimento ambiente do app. */
+  @keyframes hop {
+    0%,
+    12% {
+      transform: translateX(0);
+    }
+    30%,
+    42% {
+      transform: translateX(var(--hop-1));
+    }
+    60%,
+    72% {
+      transform: translateX(var(--hop-2));
+    }
+    92%,
+    100% {
+      transform: translateX(0);
+    }
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    background: var(--color-ink-950);
+  }
+  body {
+    @apply bg-ink-950 text-fg font-sans antialiased;
+    min-height: 100dvh;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-cobalt-400);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--color-cobalt-500) 45%, transparent);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
