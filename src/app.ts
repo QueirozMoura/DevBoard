@@ -1,3 +1,4 @@
+import { projectsRoutes } from './modules/projects/projects.routes.js';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
@@ -60,6 +61,7 @@ export function buildApp(
   registerAuthentication(app, env);
   void app.register(healthRoutes);
   void app.register(authRoutes, { prefix: '/api/v1/auth' });
+  void app.register(projectsRoutes, { prefix: '/api/v1' });
   void app.register(usersRoutes, { prefix: '/api/v1' });
 
   return app;

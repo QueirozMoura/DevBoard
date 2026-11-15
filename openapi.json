@@ -365,7 +365,7 @@
           "Projetos"
         ],
         "summary": "Projetos dos quais o usuário é membro",
-        "x-status": "planned",
+        "x-status": "implemented",
         "security": [
           {
             "bearerAuth": []
@@ -408,7 +408,7 @@
           "Projetos"
         ],
         "summary": "Cria projeto (criador vira OWNER)",
-        "x-status": "planned",
+        "x-status": "implemented",
         "security": [
           {
             "bearerAuth": []
@@ -454,7 +454,7 @@
           "Projetos"
         ],
         "summary": "Detalhe do projeto",
-        "x-status": "planned",
+        "x-status": "implemented",
         "security": [
           {
             "bearerAuth": []
@@ -494,7 +494,7 @@
           "Projetos"
         ],
         "summary": "Edita nome/descrição",
-        "x-status": "planned",
+        "x-status": "implemented",
         "security": [
           {
             "bearerAuth": []
@@ -550,7 +550,7 @@
           "Projetos"
         ],
         "summary": "Exclui o projeto e todo o conteúdo (irreversível)",
-        "x-status": "planned",
+        "x-status": "implemented",
         "security": [
           {
             "bearerAuth": []
@@ -588,7 +588,7 @@
           "Membros"
         ],
         "summary": "Lista membros",
-        "x-status": "planned",
+        "x-status": "implemented",
         "security": [
           {
             "bearerAuth": []
@@ -638,7 +638,7 @@
           "Membros"
         ],
         "summary": "Adiciona usuário existente pelo e-mail",
-        "x-status": "planned",
+        "x-status": "implemented",
         "security": [
           {
             "bearerAuth": []
@@ -699,7 +699,7 @@
           "Membros"
         ],
         "summary": "Altera o papel (não rebaixa o último OWNER)",
-        "x-status": "planned",
+        "x-status": "implemented",
         "security": [
           {
             "bearerAuth": []
@@ -761,7 +761,7 @@
           "Membros"
         ],
         "summary": "Remove membro (OWNER) ou sai do projeto (o próprio usuário)",
-        "x-status": "planned",
+        "x-status": "implemented",
         "security": [
           {
             "bearerAuth": []
